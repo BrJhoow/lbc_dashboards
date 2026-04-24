@@ -33,6 +33,86 @@ function formatSeconds(totalSeconds: number) {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
+const getSlaColor = (val: number) => {
+  if (val <= 0) return 'text-slate-400';
+  if (val >= 1 && val <= 89) return 'text-rose-600 font-bold'; // RED (SUPERFICIAL)
+  if (val >= 90 && val <= 300) return 'text-emerald-600 font-bold'; // GREEN (EFICIENTE)
+  if (val >= 301 && val <= 600) return 'text-amber-500 font-bold'; // YELLOW (MODERADO)
+  if (val >= 601 && val <= 1200) return 'text-orange-500 font-bold'; // ORANGE (PROLONGADO)
+  if (val >= 1201 && val <= 1800) return 'text-purple-600 font-bold'; // PURPLE (EXCESSIVO)
+  if (val >= 1801) return 'text-red-600 font-bold'; // RED (CRITICAL)
+  return 'text-slate-600';
+};
+
+const getTotalTalkTimeColor = (val: number) => {
+  if (val <= 0) return 'text-slate-400';
+  if (val >= 1 && val <= 14400) return 'text-rose-600 font-bold'; // RED (SUPERFICIAL)
+  if (val >= 14401 && val <= 28800) return 'text-emerald-600 font-bold'; // GREEN (EFICIENTE)
+  if (val >= 28801 && val <= 43200) return 'text-amber-500 font-bold'; // YELLOW (MODERADO)
+  if (val >= 43201 && val <= 64800) return 'text-orange-500 font-bold'; // ORANGE (PROLONGADO)
+  if (val >= 64801 && val <= 90000) return 'text-purple-600 font-bold'; // PURPLE (EXCESSIVO)
+  if (val >= 90001) return 'text-red-600 font-bold'; // RED (CRITICAL)
+  return 'text-slate-600';
+};
+
+interface MetricStep {
+  label: string;
+  range: string;
+  color: string;
+  desc?: string;
+}
+
+const SLA_METRICS: MetricStep[] = [
+  { label: 'SUPERFICIAL', range: '00:01 - 01:29', color: 'bg-rose-500', desc: 'Muito curto' },
+  { label: 'EFICIENTE', range: '01:30 - 05:00', color: 'bg-emerald-500', desc: 'Tempo ideal' },
+  { label: 'MODERADO', range: '05:01 - 10:00', color: 'bg-amber-500', desc: 'Esperado' },
+  { label: 'PROLONGADO', range: '10:01 - 20:00', color: 'bg-orange-500', desc: 'Longo' },
+  { label: 'EXCESSIVO', range: '20:01 - 30:00', color: 'bg-purple-500', desc: 'Muito longo' },
+  { label: 'CRÍTICO', range: '≥ 30:01', color: 'bg-red-600', desc: 'Crítico' },
+];
+
+const TOTAL_TALK_METRICS: MetricStep[] = [
+  { label: 'SUPERFICIAL', range: '0 - 4h', color: 'bg-rose-500' },
+  { label: 'EFICIENTE', range: '4 - 8h', color: 'bg-emerald-500' },
+  { label: 'MODERADO', range: '8 - 12h', color: 'bg-amber-500' },
+  { label: 'PROLONGADO', range: '12 - 18h', color: 'bg-orange-500' },
+  { label: 'EXCESSIVO', range: '18 - 25h', color: 'bg-purple-500' },
+  { label: 'CRÍTICO', range: '≥ 25:01h', color: 'bg-red-600' },
+];
+
+const CustomTooltip = ({ title, items, children }: { title: string; items: MetricStep[]; children: React.ReactNode }) => {
+  const [isVisible, setIsVisible] = useState(false);
+  
+  return (
+    <div className="relative inline-block" onMouseEnter={() => setIsVisible(true)} onMouseLeave={() => setIsVisible(false)} onClick={() => setIsVisible(!isVisible)}>
+      {children}
+      {isVisible && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-3 w-72 p-0 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 pointer-events-none animate-in fade-in zoom-in duration-200 origin-bottom">
+           <div className="p-3 border-b border-slate-100 dark:border-slate-800">
+             <h4 className="text-[11px] font-bold text-slate-900 dark:text-white uppercase tracking-wider text-center">{title}</h4>
+           </div>
+           <div className="p-2 space-y-1">
+             {items.map((item, idx) => (
+               <div key={idx} className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                 <div className={`w-2 h-2 rounded-full shrink-0 ${item.color} shadow-sm shadow-black/10`} />
+                 <div className="flex flex-col flex-1 leading-tight">
+                   <div className="flex justify-between items-baseline gap-2">
+                     <span className="text-[10px] font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap">{item.label}</span>
+                     <span className="text-[9px] font-mono font-medium text-slate-400 dark:text-slate-500">{item.range}</span>
+                   </div>
+                   {item.desc && <span className="text-[8px] text-slate-400 dark:text-slate-500">{item.desc}</span>}
+                 </div>
+               </div>
+             ))}
+           </div>
+           <div className="absolute top-full left-1/2 -translate-x-1/2 border-[6px] border-transparent border-t-slate-200 dark:border-t-slate-800" />
+           <div className="absolute top-full left-1/2 -translate-x-1/2 mt-[-1px] border-[6px] border-transparent border-t-white dark:border-t-slate-900" />
+        </div>
+      )}
+    </div>
+  );
+};
+
 function formatPhone(num: string) {
   if (!num || num === 'Unknown' || num === 'Anonymous') return num;
   let digits = num.replace(/\D/g, '');
@@ -746,12 +826,10 @@ function MetricsCards({ data }: { data: CallData[] }) {
     : 0;
 
   // Gauge Logic - Better thresholds for "Fidelity"
-  // SLA: <1m (Bom), 1m-3m (Médio), >3m (Lento)
-  const GAUGE_MAX = 1200;
+  const GAUGE_MAX = activeMetric === 'avg' ? 1800 : 90000;
   const currentVal = activeMetric === 'avg' ? avgTalkTime : totalTalkTime;
   const currentValClamped = Math.min(currentVal, GAUGE_MAX);
   
-  // Gauge Logic - Better thresholds for "Fidelity"
   // percent for the needle position (0-100)
   const percent = (currentValClamped / GAUGE_MAX) * 100;
 
@@ -761,14 +839,19 @@ function MetricsCards({ data }: { data: CallData[] }) {
     if (val <= 0) return { label: 'AGUARDANDO', color: '#64748b', tailwind: 'text-slate-600 bg-slate-50 border-slate-100' };
     
     if (activeMetric === 'avg') {
-      if (val >= 150 && val <= 420) return { label: 'BOM', color: '#10b981', tailwind: 'text-emerald-600 bg-emerald-50 border-emerald-100' };
-      if ((val >= 90 && val <= 149) || (val >= 421 && val <= 900)) return { label: 'MÉDIO', color: '#f59e0b', tailwind: 'text-amber-600 bg-amber-50 border-amber-100' };
-      if ((val >= 1 && val <= 89) || val >= 901) return { label: 'LENTO', color: '#ef4444', tailwind: 'text-rose-600 bg-rose-50 border-rose-100' };
+      if (val >= 1 && val <= 89) return { label: 'SUPERFICIAL', color: '#EF4444', tailwind: 'text-rose-600 bg-rose-50 border-rose-100' };
+      if (val >= 90 && val <= 300) return { label: 'EFICIENTE', color: '#10B981', tailwind: 'text-emerald-600 bg-emerald-50 border-emerald-100' };
+      if (val >= 301 && val <= 600) return { label: 'MODERADO', color: '#FBBF24', tailwind: 'text-amber-600 bg-amber-50 border-amber-100' };
+      if (val >= 601 && val <= 1200) return { label: 'PROLONGADO', color: '#F97316', tailwind: 'text-orange-600 bg-orange-50 border-orange-100' };
+      if (val >= 1201 && val <= 1800) return { label: 'EXCESSIVO', color: '#A855F7', tailwind: 'text-purple-600 bg-purple-50 border-purple-100' };
+      if (val >= 1801) return { label: 'CRÍTICO', color: '#DC2626', tailwind: 'text-red-700 bg-red-100 border-red-200' };
     } else {
-      // Tempo de Conversa Total: Red -> Yellow -> Green
-      if (val >= 421 && val <= 900) return { label: 'BOM', color: '#10b981', tailwind: 'text-emerald-600 bg-emerald-50 border-emerald-100' };
-      if (val >= 150 && val <= 420) return { label: 'MÉDIO', color: '#f59e0b', tailwind: 'text-amber-600 bg-amber-50 border-amber-100' };
-      if ((val >= 1 && val <= 149) || val >= 901) return { label: 'BAIXO', color: '#ef4444', tailwind: 'text-rose-600 bg-rose-50 border-rose-100' };
+      if (val >= 1 && val <= 14400) return { label: 'SUPERFICIAL', color: '#EF4444', tailwind: 'text-rose-600 bg-rose-50 border-rose-100' };
+      if (val >= 14401 && val <= 28800) return { label: 'EFICIENTE', color: '#10B981', tailwind: 'text-emerald-600 bg-emerald-50 border-emerald-100' };
+      if (val >= 28801 && val <= 43200) return { label: 'MODERADO', color: '#FBBF24', tailwind: 'text-amber-600 bg-amber-50 border-amber-100' };
+      if (val >= 43201 && val <= 64800) return { label: 'PROLONGADO', color: '#F97316', tailwind: 'text-orange-600 bg-orange-50 border-orange-100' };
+      if (val >= 64801 && val <= 90000) return { label: 'EXCESSIVO', color: '#A855F7', tailwind: 'text-purple-600 bg-purple-50 border-purple-100' };
+      if (val >= 90001) return { label: 'CRÍTICO', color: '#DC2626', tailwind: 'text-red-700 bg-red-100 border-red-200' };
     }
     return { label: 'ESTÁVEL', color: '#64748b', tailwind: 'text-slate-600 bg-slate-50 border-slate-100' };
   };
@@ -804,25 +887,28 @@ function MetricsCards({ data }: { data: CallData[] }) {
   };
 
   const activeMetricSegments = activeMetric === 'avg' ? [
-    { range: 90, color: '#EF4444', label: 'LENTO' },   // 0-90
-    { range: 60, color: '#FBBF24', label: 'MÉDIO' },  // 90-150
-    { range: 270, color: '#10B981', label: 'BOM' },   // 150-420
-    { range: 480, color: '#FBBF24', label: 'MÉDIO' },  // 421-900
-    { range: 300, color: '#EF4444', label: 'LENTO' }   // 901-1200
+    { range: 89, color: '#EF4444', label: 'SUPERFICIAL' },
+    { range: 211, color: '#10B981', label: 'EFICIENTE' },
+    { range: 300, color: '#FBBF24', label: 'MODERADO' },
+    { range: 600, color: '#F97316', label: 'PROLONGADO' },
+    { range: 600, color: '#A855F7', label: 'EXCESSIVO' },
+    { range: 200, color: '#DC2626', label: 'CRÍTICO' }
   ] : [
-    { range: 150, color: '#EF4444', label: 'BAIXO' },  // 0-150
-    { range: 270, color: '#FBBF24', label: 'MÉDIO' },  // 150-420
-    { range: 480, color: '#10B981', label: 'BOM' },    // 421-900
-    { range: 300, color: '#EF4444', label: 'BAIXO' }   // 901-1200
+    { range: 14400, color: '#EF4444', label: 'SUPERFICIAL' },
+    { range: 14400, color: '#10B981', label: 'EFICIENTE' },
+    { range: 14400, color: '#FBBF24', label: 'MODERADO' },
+    { range: 21600, color: '#F97316', label: 'PROLONGADO' },
+    { range: 25200, color: '#A855F7', label: 'EXCESSIVO' },
+    { range: 10000, color: '#DC2626', label: 'CRÍTICO' }
   ];
 
-  const backgroundPieData = activeMetricSegments.map(s => ({
-    value: (s.range / GAUGE_MAX) * 100,
-    color: '#F1F5F9' // Solid neutral background track
-  }));
+  const backgroundPieData = [
+    { value: 100, color: '#F1F5F9' }
+  ];
 
   const activePieData = [
-    { value: percent, color: statusInfo.color }
+    { value: percent, color: statusInfo.color },
+    { value: 100 - percent, color: 'transparent' }
   ];
 
   return (
@@ -959,8 +1045,8 @@ function MetricsCards({ data }: { data: CallData[] }) {
 
             <div className="w-full h-28 relative">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart style={{ bottom: '8px' }}>
-                  {/* Background Track with Colored Segments */}
+                <PieChart style={{ bottom: '20px' }}>
+                  {/* Background Track */}
                   <Pie
                     data={backgroundPieData}
                     cx={112}
@@ -973,9 +1059,7 @@ function MetricsCards({ data }: { data: CallData[] }) {
                     stroke="none"
                     isAnimationActive={false}
                   >
-                    {backgroundPieData.map((entry, index) => (
-                      <Cell key={`cell-bg-${index}`} fill={entry.color} />
-                    ))}
+                    <Cell fill="#F1F5F9" />
                   </Pie>
                   {/* Active Value Fill */}
                   <Pie
@@ -983,7 +1067,7 @@ function MetricsCards({ data }: { data: CallData[] }) {
                     cx={112}
                     cy={105}
                     startAngle={180}
-                    endAngle={180 - (180 * (percent / 100))}
+                    endAngle={0}
                     innerRadius={65}
                     outerRadius={85}
                     dataKey="value"
@@ -1007,12 +1091,12 @@ function MetricsCards({ data }: { data: CallData[] }) {
                 </PieChart>
               </ResponsiveContainer>
               {/* Legend for gauge - Dynamic SLA indicator */}
-              <div className="absolute -bottom-5 w-full flex justify-between text-[8px] font-black uppercase tracking-tighter text-slate-400" style={{ left: '29px', paddingRight: '50px', paddingLeft: '5px' }}>
-                 <span style={{ paddingTop: '3px', paddingLeft: '3px' }}>{activeMetric === 'avg' ? '0m' : '0m'}</span>
-                 <span className="text-[20px] -translate-y-6 font-black" style={{ color: statusInfo.color, paddingLeft: '4px' }}>
+              <div className="absolute -bottom-5 w-full flex justify-between items-center text-[8px] font-black uppercase tracking-tighter text-slate-400" style={{ left: '26px', paddingRight: '48px', paddingLeft: '5px' }}>
+                 <span style={{ paddingTop: '3px', paddingLeft: '3px', marginBottom: '25px', marginLeft: '3px' }}>{activeMetric === 'avg' ? '0m' : '0h'}</span>
+                 <span className="text-[13px] -translate-y-5 font-black tracking-tight text-center truncate px-1" style={{ color: statusInfo.color, maxWidth: '100px', marginBottom: '12px', marginLeft: '7px' }}>
                    {statusInfo.label}
                  </span>
-                 <span style={{ paddingTop: '3px', paddingLeft: '0px' }}>{activeMetric === 'avg' ? '20m+' : '20m+'}</span>
+                 <span style={{ paddingTop: '3px', paddingLeft: '0px', marginBottom: '25px', marginRight: '3px' }}>{activeMetric === 'avg' ? '30m+' : '25h+'}</span>
               </div>
             </div>
           </div>
@@ -2226,12 +2310,25 @@ function AgentPerformanceSummary({ data }: { data: CallData[] }) {
       if (name === 'Não Atribuído' || name.trim() === '') return acc;
       
       const shortName = name.split(' - ')[0];
-      if (!acc[shortName]) acc[shortName] = { name: shortName, atendidas: 0, totalTalkTime: 0, callsByNumber: {} as Record<string, number> };
+      if (!acc[shortName]) acc[shortName] = { 
+        name: shortName, 
+        atendidas: 0, 
+        atendidasGoTo: 0,
+        atendidasChat: 0,
+        totalTalkTime: 0, 
+        callsByNumber: {} as Record<string, number> 
+      };
       
       const reason = call.leftQueueReason?.toLowerCase() || '';
       if (reason === 'answered') {
         acc[shortName].atendidas += 1;
         acc[shortName].totalTalkTime += call.talkDuration;
+        
+        if (call.origin === 'GoTo') {
+          acc[shortName].atendidasGoTo += 1;
+        } else if (call.origin === 'Chat') {
+          acc[shortName].atendidasChat += 1;
+        }
       }
       
       const num = call.callerNumber;
@@ -2253,6 +2350,9 @@ function AgentPerformanceSummary({ data }: { data: CallData[] }) {
       return {
         name: agent.name,
         atendidas: agent.atendidas,
+        atendidasGoTo: agent.atendidasGoTo,
+        atendidasChat: agent.atendidasChat,
+        totalTalkTime: agent.totalTalkTime,
         avgTalkTime: agent.atendidas > 0 ? Math.round(agent.totalTalkTime / agent.atendidas) : 0,
         recurrences: recurrences
       };
@@ -2270,20 +2370,6 @@ function AgentPerformanceSummary({ data }: { data: CallData[] }) {
     });
   }, [summaryData, sortCol, sortDesc]);
 
-  // Calculations for conditional formatting
-  const validTimes = summaryData.filter(d => d.avgTalkTime > 0).map(d => d.avgTalkTime);
-  const minTime = validTimes.length > 0 ? Math.min(...validTimes) : 0;
-  const maxTime = validTimes.length > 0 ? Math.max(...validTimes) : 0;
-  const range = maxTime - minTime;
-
-  const getTimeColor = (time: number) => {
-    if (time === 0) return 'text-slate-600';
-    if (range === 0) return 'text-emerald-600 font-semibold';
-    if (time <= minTime + range / 3) return 'text-emerald-600 font-semibold';
-    if (time <= minTime + 2 * (range / 3)) return 'text-amber-500 font-semibold';
-    return 'text-rose-600 font-semibold';
-  };
-
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 shrink-0 overflow-x-auto">
       <h3 className="text-sm font-semibold mb-3 text-slate-900">Resumo do desempenho individual</h3>
@@ -2300,13 +2386,31 @@ function AgentPerformanceSummary({ data }: { data: CallData[] }) {
               className="px-3 py-2 font-medium cursor-pointer hover:bg-slate-100 transition-colors text-center"
               onClick={() => handleSort('atendidas')}
             >
-              <div className="flex items-center justify-center gap-1">Atendidas <ArrowUpDown className="h-3 w-3" /></div>
+              <div className="flex items-center justify-center gap-1">Total Atendidas <ArrowUpDown className="h-3 w-3" /></div>
+            </th>
+            <th 
+              className="px-3 py-2 font-medium cursor-pointer hover:bg-slate-100 transition-colors text-center"
+              onClick={() => handleSort('atendidasGoTo')}
+            >
+              <div className="flex items-center justify-center gap-1 text-indigo-600">GoTo <ArrowUpDown className="h-3 w-3" /></div>
+            </th>
+            <th 
+              className="px-3 py-2 font-medium cursor-pointer hover:bg-slate-100 transition-colors text-center"
+              onClick={() => handleSort('atendidasChat')}
+            >
+              <div className="flex items-center justify-center gap-1 text-emerald-600">Chat <ArrowUpDown className="h-3 w-3" /></div>
             </th>
             <th 
               className="px-3 py-2 font-medium cursor-pointer hover:bg-slate-100 transition-colors text-center"
               onClick={() => handleSort('avgTalkTime')}
             >
               <div className="flex items-center justify-center gap-1">T. Médio de Atendimento <ArrowUpDown className="h-3 w-3" /></div>
+            </th>
+            <th 
+              className="px-3 py-2 font-medium cursor-pointer hover:bg-slate-100 transition-colors text-center"
+              onClick={() => handleSort('totalTalkTime')}
+            >
+              <div className="flex items-center justify-center gap-1">T. de Conversa Total <ArrowUpDown className="h-3 w-3" /></div>
             </th>
             <th 
               className="px-3 py-2 font-medium cursor-pointer hover:bg-slate-100 transition-colors text-center"
@@ -2318,13 +2422,28 @@ function AgentPerformanceSummary({ data }: { data: CallData[] }) {
         </thead>
         <tbody className="divide-y divide-slate-50">
           {sortedSummary.length === 0 ? (
-            <tr><td colSpan={4} className="px-3 py-4 text-center text-slate-400">Nenhum dado encontrado</td></tr>
+            <tr><td colSpan={7} className="px-3 py-4 text-center text-slate-400">Nenhum dado encontrado</td></tr>
           ) : (
             sortedSummary.map((item, idx) => (
               <tr key={idx} className="hover:bg-slate-50 transition-colors">
                 <td className="px-3 py-2 font-medium text-[11px] text-slate-900">{formatAgentName(item.name)}</td>
-                <td className="px-3 py-2 text-[11px] font-mono text-indigo-700 text-center font-semibold">{item.atendidas}</td>
-                <td className={`px-3 py-2 text-[11px] font-mono text-center ${getTimeColor(item.avgTalkTime)}`}>{formatSeconds(item.avgTalkTime)}</td>
+                <td className="px-3 py-2 text-[11px] font-mono text-indigo-900 text-center font-bold bg-slate-50/50">{item.atendidas}</td>
+                <td className="px-3 py-2 text-[11px] font-mono text-indigo-600 text-center">{item.atendidasGoTo}</td>
+                <td className="px-3 py-2 text-[11px] font-mono text-emerald-600 text-center">{item.atendidasChat}</td>
+                <td className="px-3 py-2 text-[11px] font-mono text-center">
+                  <CustomTooltip title="Métricas de Atendimento (SLA)" items={SLA_METRICS}>
+                    <span className={`cursor-help transition-all ${getSlaColor(item.avgTalkTime)}`}>
+                      {formatSeconds(item.avgTalkTime)}
+                    </span>
+                  </CustomTooltip>
+                </td>
+                <td className="px-3 py-2 text-[11px] font-mono text-center">
+                  <CustomTooltip title="Métricas de Conversa Total" items={TOTAL_TALK_METRICS}>
+                    <span className={`cursor-help transition-all ${getTotalTalkTimeColor(item.totalTalkTime)}`}>
+                      {formatSeconds(item.totalTalkTime)}
+                    </span>
+                  </CustomTooltip>
+                </td>
                 <td className="px-3 py-2 text-[11px] font-mono text-slate-600 text-center">{item.recurrences}</td>
               </tr>
             ))
@@ -2519,7 +2638,13 @@ function DataTable({ data }: { data: CallData[] }) {
                 <td className="p-3 font-semibold text-slate-600 whitespace-nowrap">
                   {format(horaFimTime, 'HH:mm:ss')}
                 </td>
-                <td className="p-3 text-indigo-700 font-medium text-center">{formatSeconds(call.talkDuration)}</td>
+                <td className="p-3 text-center">
+                  <CustomTooltip title="Métricas de Atendimento (SLA)" items={SLA_METRICS}>
+                    <span className={`font-bold cursor-help transition-all ${getSlaColor(call.talkDuration)}`}>
+                      {formatSeconds(call.talkDuration)}
+                    </span>
+                  </CustomTooltip>
+                </td>
                 <td className="p-3 font-bold text-slate-900 whitespace-nowrap">{formatPhone(call.callerNumber)}</td>
                 <td className="p-3 truncate max-w-[150px] text-slate-600" title={call.queue}>{call.queue}</td>
                 <td className="p-3 truncate max-w-[200px] text-slate-700" title={call.agentName}>
