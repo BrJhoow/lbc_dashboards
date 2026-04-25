@@ -12,7 +12,6 @@ import { UploadCloud, FileSpreadsheet, Trash2, ChevronDown, Check, BarChart3, Li
 import { motion, AnimatePresence } from 'motion/react';
 
 import * as XLSX from 'xlsx';
-import logoLbc from './assets/logo_lbc.png';
 
 type PageType = 'atendimentos' | 'chamados';
 
@@ -102,7 +101,7 @@ export default function App() {
         <div className="max-w-[1400px] mx-auto px-4 md:px-8 pt-4">
           <div className="flex flex-col md:flex-row justify-between items-center pb-4 gap-4">
             <div className="flex items-center gap-3 w-full md:w-auto">
-              <img src={logoLbc} alt="LBC" className="h-8 w-auto object-contain" />
+              <img src="https://i.imgur.com/FOBkZRr.png" alt="LBC" className="h-8 w-auto object-contain" />
               <h1 className="font-bold text-slate-800 text-lg">Dashboard</h1>
             </div>
             
