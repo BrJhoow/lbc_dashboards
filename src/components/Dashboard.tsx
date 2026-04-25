@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { CallData } from '../lib/types';
 import { format, isWithinInterval, startOfDay, endOfDay, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
@@ -82,16 +83,53 @@ const TOTAL_TALK_METRICS: MetricStep[] = [
 
 const CustomTooltip = ({ title, items, children }: { title: string; items: MetricStep[]; children: React.ReactNode }) => {
   const [isVisible, setIsVisible] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLDivElement>(null);
   
+  const updateCoords = useCallback(() => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setCoords({
+        top: rect.top,
+        left: rect.left + rect.width / 2
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isVisible) {
+      updateCoords();
+      window.addEventListener('scroll', updateCoords, true);
+      window.addEventListener('resize', updateCoords);
+    }
+    return () => {
+      window.removeEventListener('scroll', updateCoords, true);
+      window.removeEventListener('resize', updateCoords);
+    };
+  }, [isVisible, updateCoords]);
+
   return (
-    <div className="relative inline-block" onMouseEnter={() => setIsVisible(true)} onMouseLeave={() => setIsVisible(false)} onClick={() => setIsVisible(!isVisible)}>
+    <div 
+      ref={triggerRef}
+      className="relative inline-block" 
+      onMouseEnter={() => setIsVisible(true)} 
+      onMouseLeave={() => setIsVisible(false)} 
+      onClick={() => setIsVisible(!isVisible)}
+    >
       {children}
-      {isVisible && (
-        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-3 w-72 p-0 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 pointer-events-none animate-in fade-in zoom-in duration-200 origin-bottom">
+      {isVisible && createPortal(
+        <div 
+          className="fixed z-[9999] p-0 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 pointer-events-none animate-in fade-in zoom-in duration-200 origin-bottom"
+          style={{ 
+            top: `${coords.top - 12}px`, 
+            left: `${coords.left}px`,
+            transform: 'translate(-50%, -100%)' 
+          }}
+        >
            <div className="p-3 border-b border-slate-100 dark:border-slate-800">
              <h4 className="text-[11px] font-bold text-slate-900 dark:text-white uppercase tracking-wider text-center">{title}</h4>
            </div>
-           <div className="p-2 space-y-1">
+           <div className="p-2 space-y-1 w-72">
              {items.map((item, idx) => (
                <div key={idx} className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                  <div className={`w-2 h-2 rounded-full shrink-0 ${item.color} shadow-sm shadow-black/10`} />
@@ -105,9 +143,11 @@ const CustomTooltip = ({ title, items, children }: { title: string; items: Metri
                </div>
              ))}
            </div>
+           {/* Arrow */}
            <div className="absolute top-full left-1/2 -translate-x-1/2 border-[6px] border-transparent border-t-slate-200 dark:border-t-slate-800" />
            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-[-1px] border-[6px] border-transparent border-t-white dark:border-t-slate-900" />
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
