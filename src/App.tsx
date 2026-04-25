@@ -28,65 +28,76 @@ export default function App() {
     setIsLoading(false);
   }, []);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
+  const processFile = async (file: File): Promise<CallData[]> => {
+    return new Promise((resolve, reject) => {
+      const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+      const reader = new FileReader();
+
+      reader.onload = (evt) => {
+        try {
+          let text = '';
+          if (isExcel) {
+            const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            text = XLSX.utils.sheet_to_csv(worksheet);
+          } else {
+            text = evt.target?.result as string;
+          }
+
+          if (typeof text === 'string') {
+            resolve(parseCSVData(text));
+          } else {
+            resolve([]);
+          }
+        } catch (err) {
+          console.error(`Erro ao processar arquivo ${file.name}:`, err);
+          reject(err);
+        }
+      };
+
+      reader.onerror = () => reject(new Error(`Erro ao ler o arquivo ${file.name}`));
+
+      if (isExcel) {
+        reader.readAsArrayBuffer(file);
+      } else {
+        reader.readAsText(file);
+      }
+    });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
     e.preventDefault();
     setError(null);
-    let file: File | undefined;
+    let files: File[] = [];
+    
     if ('dataTransfer' in e) {
-      file = e.dataTransfer.files?.[0];
+      files = Array.from(e.dataTransfer.files || []);
     } else {
-      file = e.target.files?.[0];
+      files = Array.from(e.target.files || []);
     }
     
-    if (!file) return;
+    if (files.length === 0) return;
 
     setIsLoading(true);
-    
-    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
-    
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        let text = '';
-        if (isExcel) {
-          const data = new Uint8Array(evt.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
-          text = XLSX.utils.sheet_to_csv(worksheet);
-        } else {
-          text = evt.target?.result as string;
-        }
 
-        if (typeof text === 'string') {
-          const parsedData = parseCSVData(text);
-          if (parsedData.length === 0) {
-            setError('Nenhum dado válido encontrado na planilha. Verifique se o formato está correto (GoTo ou Chat).');
-          } else {
-            setData(prev => [...prev, ...parsedData]);
-          }
-        }
-      } catch (err) {
-        console.error('Erro ao processar arquivo:', err);
-        setError('Ocorreu um erro ao processar o arquivo. Certifique-se de que é um formato compatível.');
-      } finally {
-        setIsLoading(false);
+    try {
+      const results = await Promise.all(files.map(processFile));
+      const allParsedData = results.flat();
+      
+      if (allParsedData.length === 0) {
+        setError('Nenhum dado válido encontrado nos arquivos selecionados. Verifique se o formato está correto (GoTo ou Chat).');
+      } else {
+        setData(prev => [...prev, ...allParsedData]);
       }
-    };
-    reader.onerror = () => {
-      console.error('Erro na leitura do arquivo');
-      setError('Erro ao ler o arquivo selecionado.');
+    } catch (err) {
+      setError('Ocorreu um erro ao processar os arquivos. Certifique-se de que são de um formato compatível.');
+    } finally {
       setIsLoading(false);
-    };
-    
-    if (isExcel) {
-      reader.readAsArrayBuffer(file);
-    } else {
-      reader.readAsText(file);
-    }
-    
-    if ('target' in e && 'value' in (e.target as any)) {
-       (e.target as any).value = '';
+      if ('target' in e && 'value' in (e.target as any)) {
+         (e.target as any).value = '';
+      }
     }
   };
 
@@ -188,41 +199,37 @@ export default function App() {
         ) : data.length > 0 ? (
           <Dashboard data={data} view={currentPage} />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+          <div className="flex items-center justify-center min-h-[400px] max-w-3xl mx-auto w-full">
             <label 
               onDrop={handleFileUpload}
               onDragOver={handleDragOver}
-              className="flex flex-col items-center justify-center p-12 bg-white rounded-2xl border-2 border-dashed border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/50 cursor-pointer transition-all gap-4 select-none min-h-[300px]"
+              className="relative flex flex-col items-center justify-center w-full p-16 bg-white rounded-[2rem] border-2 border-dashed border-blue-200 hover:border-blue-500 hover:bg-blue-50/30 cursor-pointer transition-all duration-300 gap-6 select-none shadow-sm hover:shadow-xl group"
             >
-              <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center">
-                <UploadCloud className="h-8 w-8 text-indigo-600" />
+              <div className="absolute inset-0 bg-gradient-to-b from-blue-50/50 to-transparent rounded-[2rem] opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+              
+              <div className="relative w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center ring-8 ring-white shadow-inner group-hover:scale-110 transition-transform duration-500">
+                <UploadCloud className="h-10 w-10 text-blue-600" />
+                <div className="absolute -top-1 -right-1 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-md ring-4 ring-white">
+                  <FileSpreadsheet className="h-4 w-4" />
+                </div>
               </div>
-              <div className="text-center space-y-1">
-                <h3 className="font-semibold text-lg text-slate-800">Planilha GoTo</h3>
-                <p className="text-sm text-slate-500">Clique ou arraste o CSV ou XLSX do GoTo</p>
+              
+              <div className="text-center space-y-3 relative z-10 max-w-md">
+                <h3 className="font-bold text-2xl text-slate-800 tracking-tight">Importar Planilhas</h3>
+                <p className="text-[15px] text-slate-500 leading-relaxed">
+                  Arraste e solte seus arquivos <strong className="text-slate-700">.CSV</strong> ou <strong className="text-slate-700">.XLSX</strong> aqui, ou clique para selecionar.
+                  <br />
+                  <span className="text-sm text-blue-600 font-medium inline-block mt-3 bg-blue-50 px-3 py-1 rounded-full">Compatível com registros GoTo e Chat</span>
+                </p>
               </div>
-              <input 
-                type="file" 
-                accept=".csv, .xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
-                className="hidden" 
-                onChange={handleFileUpload}
-              />
-            </label>
+              
+              <div className="relative z-10 mt-2 px-8 py-3.5 bg-blue-600 text-white rounded-full font-semibold text-sm shadow-md group-hover:bg-blue-700 transition-colors flex items-center gap-2">
+                Selecionar Arquivos
+              </div>
 
-            <label 
-              onDrop={handleFileUpload}
-              onDragOver={handleDragOver}
-              className="flex flex-col items-center justify-center p-12 bg-white rounded-2xl border-2 border-dashed border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50/50 cursor-pointer transition-all gap-4 select-none min-h-[300px]"
-            >
-              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center">
-                <UploadCloud className="h-8 w-8 text-emerald-600" />
-              </div>
-              <div className="text-center space-y-1">
-                <h3 className="font-semibold text-lg text-slate-800">Planilha Chat</h3>
-                <p className="text-sm text-slate-500">Clique ou arraste o CSV ou XLSX do Chat</p>
-              </div>
               <input 
                 type="file" 
+                multiple
                 accept=".csv, .xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
                 className="hidden" 
                 onChange={handleFileUpload}
