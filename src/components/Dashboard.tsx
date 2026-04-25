@@ -1178,25 +1178,31 @@ function MetricsCards({ data }: { data: CallData[] }) {
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 flex-1 h-full justify-center">
+          <div className="flex flex-col gap-3 flex-1 h-full justify-center px-2">
             <button 
               onClick={() => setActiveMetric('avg')}
-              className={`p-4 rounded-2xl border transition-all text-left flex items-center gap-4 ${activeMetric === 'avg' ? 'bg-indigo-600 border-indigo-600 shadow-lg ring-4 ring-indigo-50' : 'bg-slate-50 border-slate-100 hover:border-indigo-200'}`}
+              className={`p-4 rounded-xl border transition-all text-left flex items-center justify-between gap-4 group ${activeMetric === 'avg' ? 'bg-blue-600 border-blue-600 shadow-md ring-4 ring-blue-50' : 'bg-white hover:bg-slate-50 border-slate-200 hover:border-blue-300 shadow-sm'}`}
             >
-               <div className={`w-3 h-3 rounded-full shrink-0 ${activeMetric === 'avg' ? 'bg-white shadow-[0_0_8px_white]' : 'bg-emerald-500 opacity-50'}`} />
-               <p className={`text-[10px] font-black uppercase tracking-wider leading-tight ${activeMetric === 'avg' ? 'text-white' : 'text-slate-500'}`}>
-                 Tempo Médio de Atendimento (SLA)
-               </p>
+               <div className="flex flex-col gap-1">
+                 <p className={`text-[11px] font-bold uppercase tracking-wider leading-tight ${activeMetric === 'avg' ? 'text-white' : 'text-slate-600 group-hover:text-blue-700'}`}>
+                   Tempo Médio de Atendimento
+                 </p>
+                 <span className={`text-[9px] font-semibold opacity-80 ${activeMetric === 'avg' ? 'text-blue-100' : 'text-slate-400'}`}>Visualizar SLA</span>
+               </div>
+               <div className={`w-4 h-4 rounded-full shrink-0 border-2 transition-all ${activeMetric === 'avg' ? 'border-white bg-white/20 shadow-[0_0_10px_rgba(255,255,255,0.4)]' : 'border-slate-300 bg-transparent group-hover:border-blue-400'}`} />
             </button>
 
             <button 
               onClick={() => setActiveMetric('total')}
-              className={`p-4 rounded-2xl border transition-all text-left flex items-center gap-4 ${activeMetric === 'total' ? 'bg-indigo-600 border-indigo-600 shadow-lg ring-4 ring-indigo-50' : 'bg-slate-50 border-slate-100 hover:border-indigo-200'}`}
+              className={`p-4 rounded-xl border transition-all text-left flex items-center justify-between gap-4 group ${activeMetric === 'total' ? 'bg-blue-600 border-blue-600 shadow-md ring-4 ring-blue-50' : 'bg-white hover:bg-slate-50 border-slate-200 hover:border-blue-300 shadow-sm'}`}
             >
-               <div className={`w-3 h-3 rounded-full shrink-0 ${activeMetric === 'total' ? 'bg-white shadow-[0_0_8px_white]' : 'bg-indigo-800 opacity-50'}`} />
-               <p className={`text-[10px] font-black uppercase tracking-wider leading-tight ${activeMetric === 'total' ? 'text-white' : 'text-slate-500'}`}>
-                 Tempo de Conversa Total
-               </p>
+               <div className="flex flex-col gap-1">
+                 <p className={`text-[11px] font-bold uppercase tracking-wider leading-tight ${activeMetric === 'total' ? 'text-white' : 'text-slate-600 group-hover:text-blue-700'}`}>
+                   Tempo de Conversa Total
+                 </p>
+                 <span className={`text-[9px] font-semibold opacity-80 ${activeMetric === 'total' ? 'text-blue-100' : 'text-slate-400'}`}>Carga horária</span>
+               </div>
+               <div className={`w-4 h-4 rounded-full shrink-0 border-2 transition-all ${activeMetric === 'total' ? 'border-white bg-white/20 shadow-[0_0_10px_rgba(255,255,255,0.4)]' : 'border-slate-300 bg-transparent group-hover:border-blue-400'}`} />
             </button>
           </div>
         </div>
@@ -2632,7 +2638,7 @@ function DataTable({ data }: { data: CallData[] }) {
         </div>
         <button 
           onClick={exportCSV}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-md text-[11px] font-semibold hover:bg-indigo-700 transition-colors flex items-center gap-2 tracking-wide uppercase"
+          className="bg-blue-600 text-white px-4 py-2 rounded-md text-[11px] font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2 tracking-wide uppercase shadow-sm"
         >
           <Download className="h-3 w-3" />
           Exportar CSV
@@ -2678,7 +2684,7 @@ function DataTable({ data }: { data: CallData[] }) {
                      <div className="flex items-center gap-1">
                        <button 
                          onClick={() => window.open(`https://lbc.movidesk.com/Ticket/Edit/${call.ticketNumber}`, 'movidesk_window')}
-                         className="flex-1 text-left bg-indigo-50 border border-indigo-100 text-indigo-700 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 font-mono font-bold px-2 py-1 rounded transition-colors w-fit max-w-[90px] truncate"
+                         className="flex-1 text-left bg-blue-50 border border-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 font-mono font-bold px-2 py-1 rounded transition-colors w-fit max-w-[90px] truncate"
                          title="Abrir no Movidesk"
                        >
                          {call.ticketNumber}
