@@ -13,7 +13,7 @@ import {
 import { 
   Download, UploadCloud, Users, PhoneCall, Clock, PhoneMissed, 
   ArrowUpDown, Search, Filter, Calendar as CalendarIcon, ChevronDown, Check, X,
-  CheckCircle2, Timer, TrendingUp, Thermometer, Maximize2, Copy, ChevronLeft, ChevronRight, BarChart2, ListTree
+  CheckCircle2, Timer, TrendingUp, Thermometer, Maximize2, Copy, ChevronLeft, ChevronRight, BarChart2, ListTree, SlidersHorizontal
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -507,171 +507,208 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
   return (
     <div className="min-h-screen bg-slate-50 p-4 lg:p-8 font-sans transition-all duration-500">
       <div className="max-w-[1600px] mx-auto space-y-8">
-      <div className="relative z-[60] flex flex-wrap items-center gap-1 w-full">
-        <div className="flex bg-slate-100 rounded-md p-1 border border-slate-200 items-center">
-          <Search className="h-4 w-4 text-slate-400 ml-2 shrink-0" />
-          <input
-            type="text"
-            placeholder="Buscar..."
-            className="bg-transparent text-[11px] px-2 focus:outline-none w-24 sm:w-40 border-r border-slate-200"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <Filter className="h-4 w-4 text-slate-400 ml-2 shrink-0" />
-          
-          <div className="relative flex items-center border-r border-slate-200" ref={scheduleRef}>
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sticky top-0 z-[70] w-full transition-all duration-300">
+        <div className="flex items-center gap-2 mb-4 text-slate-800">
+          <SlidersHorizontal className="h-[18px] w-[18px] text-[#2563eb]" strokeWidth={2.5} />
+          <h3 className="font-extrabold text-[#1e293b] text-sm uppercase tracking-wide">Painel de Filtros</h3>
+        </div>
+        
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-4 w-full">
+          {/* Assunto / Search */}
+          <div className="flex flex-col gap-1.5 shrink-0 flex-1 min-w-[140px] max-w-[200px]">
+            <span className="text-[10px] font-extrabold text-[#94a3b8] uppercase tracking-wide ml-1">Assunto</span>
+            <div className="flex items-center bg-white border border-slate-200 rounded-full h-[36px] px-3 focus-within:ring-2 focus-within:ring-[#2563eb]/20 focus-within:border-[#2563eb] transition-all">
+              <Search className="h-4 w-4 text-slate-400 shrink-0" />
+              <input
+                type="text"
+                placeholder="Ex: Instalação..."
+                className="bg-transparent text-[12px] px-2 focus:outline-none w-full placeholder:text-slate-400 text-slate-700"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Horário */}
+          <div className="flex flex-col gap-1.5 shrink-0 relative flex-1 min-w-[140px] max-w-[170px]" ref={scheduleRef}>
+            <span className="text-[10px] font-extrabold text-[#94a3b8] uppercase tracking-wide ml-1">Horário</span>
             <button
               onClick={() => setIsScheduleOpen(!isScheduleOpen)}
-              className="bg-transparent text-[10px] px-2 focus:outline-none min-w-[80px] sm:min-w-[100px] flex justify-between items-center h-full hover:text-indigo-600"
+              className="flex items-center justify-between bg-white border border-slate-200 rounded-full h-[36px] px-3 w-full hover:border-slate-300 transition-all text-slate-600 focus:ring-2 focus:ring-[#2563eb]/20 focus:outline-none"
             >
-              <span className="truncate max-w-[60px] sm:max-w-[80px]">
-                {selectedSchedule === 'Todos' ? "Horário" : selectedSchedule}
-              </span>
-              <ChevronDown className="h-3 w-3 text-slate-400 ml-1" />
+              <div className="flex items-center gap-2 overflow-hidden">
+                <Clock className="h-4 w-4 text-slate-400 shrink-0" />
+                <span className="text-[12px] font-medium truncate">
+                  {selectedSchedule === 'Todos' ? "Todos..." : selectedSchedule}
+                </span>
+              </div>
+              <ChevronDown className="h-3 w-3 text-slate-400 shrink-0 ml-1" />
             </button>
             {isScheduleOpen && (
-              <div className="absolute top-full mt-2 left-0 w-56 bg-white border border-slate-200 shadow-xl rounded-lg z-50 flex flex-col py-1">
+              <div className="absolute top-full mt-2 left-0 w-48 bg-white border border-slate-200 shadow-xl rounded-2xl z-50 flex flex-col py-2">
                 {SERVICE_SCHEDULES.map(sch => (
                   <button 
                     key={sch} 
                     onClick={() => { setSelectedSchedule(sch); setIsScheduleOpen(false); }}
-                    className={`text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center ${selectedSchedule === sch ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-700'}`}
+                    className={`text-left px-4 py-2 text-[12px] transition-colors hover:bg-slate-50 flex items-center ${selectedSchedule === sch ? 'bg-indigo-50/50 text-[#2563eb] font-semibold' : 'text-slate-600'}`}
                   >
-                    <div className="w-4 mr-2 flex justify-center">{selectedSchedule === sch && <Check className="h-3 w-3" />}</div>
-                    {sch === 'Todos' ? "Horário Atendimento" : sch}
+                    <div className="w-5 shrink-0 flex items-center">{selectedSchedule === sch && <Check className="h-3.5 w-3.5" />}</div>
+                    {sch === 'Todos' ? "Todos os horários..." : sch}
                   </button>
                 ))}
               </div>
             )}
           </div>
 
-          <div className="relative flex items-center border-r border-slate-200" ref={teamRef}>
+          {/* Equipes */}
+          <div className="flex flex-col gap-1.5 shrink-0 relative flex-1 min-w-[140px] max-w-[170px]" ref={teamRef}>
+            <span className="text-[10px] font-extrabold text-[#94a3b8] uppercase tracking-wide ml-1">Equipes</span>
             <button
               onClick={() => setIsTeamOpen(!isTeamOpen)}
-              className="bg-transparent text-[10px] px-2 focus:outline-none min-w-[80px] sm:min-w-[100px] flex justify-between items-center h-full hover:text-indigo-600"
+              className="flex items-center justify-between bg-white border border-slate-200 rounded-full h-[36px] px-3 w-full hover:border-slate-300 transition-all text-slate-600 focus:ring-2 focus:ring-[#2563eb]/20 focus:outline-none"
             >
-              <span className="truncate max-w-[60px] sm:max-w-[80px]">
-                {selectedTeam === 'Todos' ? "Equipes" : selectedTeam}
-              </span>
-              <ChevronDown className="h-3 w-3 text-slate-400 ml-1" />
+              <div className="flex items-center gap-2 overflow-hidden">
+                <Users className="h-4 w-4 text-slate-400 shrink-0" />
+                <span className="text-[12px] font-medium truncate">
+                  {selectedTeam === 'Todos' ? "Todas..." : selectedTeam}
+                </span>
+              </div>
+              <ChevronDown className="h-3 w-3 text-slate-400 shrink-0 ml-1" />
             </button>
             {isTeamOpen && (
-              <div className="absolute top-full mt-2 left-0 w-48 bg-white border border-slate-200 shadow-xl rounded-lg z-50 flex flex-col py-1">
+              <div className="absolute top-full mt-2 left-0 w-48 bg-white border border-slate-200 shadow-xl rounded-2xl z-50 flex flex-col py-2">
                 {ALL_TEAMS.map(team => (
                   <button 
                     key={team} 
-                    onClick={() => handleTeamChange(team)}
-                    className={`text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center ${selectedTeam === team ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-700'}`}
+                    onClick={() => { handleTeamChange(team); setIsTeamOpen(false); }}
+                    className={`text-left px-4 py-2 text-[12px] transition-colors hover:bg-slate-50 flex items-center ${selectedTeam === team ? 'bg-indigo-50/50 text-[#2563eb] font-semibold' : 'text-slate-600'}`}
                   >
-                    <div className="w-4 mr-2 flex justify-center">{selectedTeam === team && <Check className="h-3 w-3" />}</div>
-                    {team === 'Todos' ? "Todas Equipes" : team}
+                    <div className="w-5 shrink-0 flex items-center">{selectedTeam === team && <Check className="h-3.5 w-3.5" />}</div>
+                    {team === 'Todos' ? "Todas as equipes..." : team}
                   </button>
                 ))}
               </div>
             )}
           </div>
 
-          <div className="relative flex items-center" ref={agentRef}>
+          {/* Técnicos / Operadores */}
+          <div className="flex flex-col gap-1.5 shrink-0 relative flex-1 min-w-[140px] max-w-[170px]" ref={agentRef}>
+            <span className="text-[10px] font-extrabold text-[#94a3b8] uppercase tracking-wide ml-1">Técnicos</span>
             <button
               onClick={() => setIsAgentOpen(!isAgentOpen)}
-              className="bg-transparent text-[10px] px-2 focus:outline-none min-w-[100px] sm:min-w-[120px] flex justify-between items-center h-full hover:text-indigo-600"
+              className="flex items-center justify-between bg-white border border-slate-200 rounded-full h-[36px] px-3 w-full hover:border-slate-300 transition-all text-slate-600 focus:ring-2 focus:ring-[#2563eb]/20 focus:outline-none"
             >
-              <span className="truncate max-w-[80px] sm:max-w-[100px]">
-                {selectedAgents.length === 0 
-                  ? "Operadores" 
+              <div className="flex items-center gap-2 overflow-hidden">
+                <Users className="h-4 w-4 text-slate-400 shrink-0" />
+                <span className="text-[12px] font-medium truncate">
+                  {selectedAgents.length === 0 
+                  ? "Todos..." 
                   : `${selectedAgents.length} sel.`}
-              </span>
-              <ChevronDown className="h-3 w-3 text-slate-400 ml-1" />
+                </span>
+              </div>
+              <ChevronDown className="h-3 w-3 text-slate-400 shrink-0 ml-1" />
             </button>
             {isAgentOpen && (
-              <div className="absolute top-full mt-2 right-0 w-64 bg-white border border-slate-200 shadow-xl rounded-lg z-50 max-h-64 overflow-y-auto overflow-x-hidden flex flex-col py-1">
+              <div className="absolute top-full mt-2 left-0 w-64 bg-white border border-slate-200 shadow-xl rounded-2xl z-50 max-h-72 overflow-y-auto flex flex-col py-2">
                 <button 
                   onClick={() => setSelectedAgents([])}
-                  className={`text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center ${selectedAgents.length === 0 ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-700'}`}
+                  className={`text-left px-4 py-2 text-[12px] transition-colors hover:bg-slate-50 flex items-center ${selectedAgents.length === 0 ? 'bg-indigo-50/50 text-[#2563eb] font-semibold' : 'text-slate-600'}`}
                 >
-                  <div className="w-4 mr-2 flex justify-center">{selectedAgents.length === 0 && <Check className="h-3 w-3" />}</div>
-                  Todos Operadores
+                  <div className="w-5 shrink-0 flex items-center">{selectedAgents.length === 0 && <Check className="h-3.5 w-3.5" />}</div>
+                  Todos os técnicos...
                 </button>
                 {uniqueAgents.map(ag => (
                   <button 
                     key={ag} 
                     onClick={() => toggleAgent(ag)}
-                    className={`text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center ${selectedAgents.includes(ag) ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-700'}`}
+                    className={`text-left px-4 py-2 text-[12px] transition-colors hover:bg-slate-50 flex items-center ${selectedAgents.includes(ag) ? 'bg-indigo-50/50 text-[#2563eb] font-semibold' : 'text-slate-600'}`}
                   >
-                    <div className="w-4 mr-2 shrink-0 flex justify-center">{selectedAgents.includes(ag) && <Check className="h-3 w-3" />}</div>
+                    <div className="w-5 shrink-0 flex items-center">{selectedAgents.includes(ag) && <Check className="h-3.5 w-3.5" />}</div>
                     <span className="truncate">{ag}</span>
                   </button>
                 ))}
               </div>
             )}
           </div>
-        </div>
 
-        <div className="relative shrink-0" ref={calendarRef}>
-          <button 
-            type="button"
-            className="flex bg-slate-100 rounded-md p-2 border border-slate-200 items-center hover:bg-slate-200 transition-colors h-[38px]"
-            onClick={() => setIsCalendarOpen(!isCalendarOpen)}
-          >
-            <CalendarIcon className="h-4 w-4 text-slate-500 mr-2 shrink-0" />
-            <span className="text-[10px] font-semibold text-slate-700 whitespace-nowrap">
-              {dateRange?.from ? (
-                dateRange.to && dateRange.from.getTime() !== dateRange.to.getTime()
-                  ? `${format(dateRange.from, 'dd/MM/yy')} - ${format(dateRange.to, 'dd/MM/yy')}`
-                  : format(dateRange.from, 'dd/MM/yyyy')
-              ) : (
-                "Selecionar data"
-              )}
-            </span>
-          </button>
-          
-          {isCalendarOpen && (
-            <div className="absolute top-full mt-2 left-0 z-50 bg-white border border-slate-200 shadow-xl rounded-lg p-3">
-              <DayPicker
-                mode="range"
-                locale={ptBR}
-                selected={dateRange}
-                onSelect={(range) => {
-                  setDateRange(range);
-                }}
-                className="text-xs"
-                styles={{
-                  cell: { padding: '2px' },
-                  day: { width: '32px', height: '32px', fontSize: '12px' }
-                }}
-              />
+          {/* Período / Date Range */}
+          <div className="flex flex-col gap-1.5 shrink-0 relative flex-[1.5] min-w-[190px] max-w-[230px]" ref={calendarRef}>
+            <span className="text-[10px] font-extrabold text-[#94a3b8] uppercase tracking-wide ml-1">Período</span>
+            <button 
+              type="button"
+              className="flex items-center justify-between bg-white border border-slate-200 rounded-full h-[36px] px-3 w-full hover:border-slate-300 transition-all text-slate-600 focus:ring-2 focus:ring-[#2563eb]/20 focus:outline-none"
+              onClick={() => setIsCalendarOpen(!isCalendarOpen)}
+            >
+              <span className="text-[12px] font-medium whitespace-nowrap overflow-hidden text-ellipsis">
+                {dateRange?.from ? (
+                  dateRange.to && dateRange.from.getTime() !== dateRange.to.getTime()
+                    ? `${format(dateRange.from, 'dd/MM/yyyy')} - ${format(dateRange.to, 'dd/MM/yyyy')}`
+                    : format(dateRange.from, 'dd/MM/yyyy')
+                ) : (
+                  "dd/mm/yyyy - dd/mm/yyyy"
+                )}
+              </span>
+              <CalendarIcon className="h-4 w-4 text-slate-400 shrink-0 ml-2" />
+            </button>
+            
+            {isCalendarOpen && (
+              <div className="absolute top-full mt-2 right-0 z-50 bg-white border border-slate-200 shadow-xl rounded-2xl p-4">
+                <DayPicker
+                  mode="range"
+                  locale={ptBR}
+                  selected={dateRange}
+                  onSelect={(range) => {
+                    setDateRange(range);
+                  }}
+                  className="text-sm"
+                  styles={{
+                    cell: { padding: '4px' },
+                    day: { width: '36px', height: '36px', fontSize: '13px' }
+                  }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Right aligned actions: Origem & Clear */}
+          <div className="ml-auto flex items-end gap-2 shrink-0">
+            {/* Origem */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-extrabold text-[#94a3b8] uppercase tracking-wide ml-1 hidden xl:block">Origem</span>
+              <div className="flex bg-slate-50 rounded-full p-1 border border-slate-200 h-[36px] items-center">
+                <button
+                  onClick={() => setOriginFilter('All')}
+                  className={`px-3 py-1 text-[11px] font-bold rounded-full transition-all h-full flex items-center justify-center ${originFilter === 'All' ? 'bg-white text-[#2563eb] shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Todos
+                </button>
+                <button
+                  onClick={() => setOriginFilter('Chat')}
+                  className={`px-3 py-1 text-[11px] font-bold rounded-full transition-all h-full flex items-center justify-center ${originFilter === 'Chat' ? 'bg-white text-[#2563eb] shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Chat
+                </button>
+                <button
+                  onClick={() => setOriginFilter('GoTo')}
+                  className={`px-3 py-1 text-[11px] font-bold rounded-full transition-all h-full flex items-center justify-center ${originFilter === 'GoTo' ? 'bg-white text-[#2563eb] shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  GoTo
+                </button>
+              </div>
             </div>
-          )}
-        </div>
 
-        <button
-          onClick={handleClearFilters}
-          className="flex items-center gap-1.5 bg-white text-slate-600 px-3 h-[38px] rounded-md border border-slate-200 hover:bg-slate-50 hover:text-slate-900 transition-colors shrink-0 text-[10px] sm:text-xs font-medium whitespace-nowrap"
-          title="Remover todos os filtros"
-        >
-          <X className="h-3.5 w-3.5 text-slate-400" />
-          Limpar Filtros
-        </button>
-
-        <div className="flex bg-slate-100 rounded-md p-1 border border-slate-200 shrink-0 ml-auto h-[38px] items-center">
-          <button
-            onClick={() => setOriginFilter('All')}
-            className={`px-2 sm:px-3 py-1 text-[9px] sm:text-[10px] uppercase font-bold rounded-md transition-all h-full ${originFilter === 'All' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Todos
-          </button>
-          <button
-            onClick={() => setOriginFilter('Chat')}
-            className={`px-2 sm:px-3 py-1 text-[9px] sm:text-[10px] uppercase font-bold rounded-md transition-all h-full ${originFilter === 'Chat' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Chat
-          </button>
-          <button
-            onClick={() => setOriginFilter('GoTo')}
-            className={`px-2 sm:px-3 py-1 text-[9px] sm:text-[10px] uppercase font-bold rounded-md transition-all h-full ${originFilter === 'GoTo' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            GoTo
-          </button>
+            {/* Clear Filters */}
+            <div className="flex flex-col gap-1.5 shrink-0">
+              <span className="text-[10px] font-extrabold text-[#94a3b8] uppercase tracking-wide ml-1 hidden xl:block opacity-0">-</span>
+              <button
+                onClick={handleClearFilters}
+                className="flex items-center justify-center bg-white text-slate-500 w-[36px] h-[36px] rounded-full border border-slate-200 hover:bg-slate-50 hover:text-red-500 transition-colors shrink-0"
+                title="Limpar todos os filtros"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2638,22 +2675,30 @@ function DataTable({ data }: { data: CallData[] }) {
               <tr key={idx} className="hover:bg-slate-50 transition-colors">
                 <td className="p-3">
                    {call.ticketNumber ? (
-                     <button 
-                        onClick={(e) => handleCopyTicket(e, call.ticketNumber)}
-                        className={`group flex items-center gap-2 px-2 py-1 rounded border transition-all duration-200 w-fit max-w-[120px] ${
-                          isRecentlyCopied 
-                            ? 'bg-emerald-50 border-emerald-300 text-emerald-700 shadow-inner' 
-                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-indigo-400 hover:bg-white hover:text-indigo-600 hover:shadow-sm'
-                        }`}
-                        title="Clique para copiar"
-                      >
-                        <span className="truncate max-w-[80px] font-mono font-bold">{call.ticketNumber}</span>
-                        {isRecentlyCopied ? (
-                          <CheckCircle2 className="h-3 w-3 text-emerald-500 animate-in zoom-in duration-300" />
-                        ) : (
-                          <Copy className="h-3 w-3 opacity-40 group-hover:opacity-100 transition-opacity" />
-                        )}
-                      </button>
+                     <div className="flex items-center gap-1">
+                       <button 
+                         onClick={() => window.open(`https://lbc.movidesk.com/Ticket/Edit/${call.ticketNumber}`, 'movidesk_window')}
+                         className="flex-1 text-left bg-indigo-50 border border-indigo-100 text-indigo-700 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 font-mono font-bold px-2 py-1 rounded transition-colors w-fit max-w-[90px] truncate"
+                         title="Abrir no Movidesk"
+                       >
+                         {call.ticketNumber}
+                       </button>
+                       <button 
+                         onClick={(e) => handleCopyTicket(e, call.ticketNumber)}
+                         className={`p-1 rounded border transition-all duration-200 ${
+                           isRecentlyCopied 
+                             ? 'bg-emerald-50 border-emerald-300 text-emerald-700 shadow-inner' 
+                             : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-indigo-400 hover:bg-white hover:text-indigo-600 hover:shadow-sm'
+                         }`}
+                         title="Clique para copiar"
+                       >
+                         {isRecentlyCopied ? (
+                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 animate-in zoom-in duration-300" />
+                         ) : (
+                           <Copy className="h-3.5 w-3.5" />
+                         )}
+                       </button>
+                     </div>
                    ) : (
                      <span className="text-slate-300 px-2">-</span>
                    )}

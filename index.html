@@ -1,6 +1,20 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      // Prevent errors from libraries that try to reassign window.fetch
+      const fetchDescriptor = Object.getOwnPropertyDescriptor(window, 'fetch');
+      if (fetchDescriptor && !fetchDescriptor.set) {
+        Object.defineProperty(window, 'fetch', {
+          get: fetchDescriptor.get || (() => window.fetch),
+          set: function(val) {
+            console.warn('Blocked attempt to override window.fetch');
+          },
+          configurable: true,
+          enumerable: fetchDescriptor.enumerable
+        });
+      }
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>My Google AI Studio App</title>
