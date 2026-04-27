@@ -13,7 +13,8 @@ import {
 import { 
   Download, UploadCloud, Users, PhoneCall, Clock, PhoneMissed, 
   ArrowUpDown, Search, Filter, Calendar as CalendarIcon, ChevronDown, ChevronUp, Check, X,
-  CheckCircle2, Timer, TrendingUp, Thermometer, Maximize2, Copy, ChevronLeft, ChevronRight, BarChart2, ListTree, SlidersHorizontal, AlertCircle
+  CheckCircle2, Timer, TrendingUp, Thermometer, Maximize2, Copy, ChevronLeft, ChevronRight, BarChart2, ListTree, SlidersHorizontal, AlertCircle,
+  Trophy, Activity, Hash, Info
 } from 'lucide-react';
 
 const getLevenshteinDistance = (a: string, b: string): number => {
@@ -496,7 +497,7 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
         agentName,
         _status: d.origin === 'Movidesk' ? (d.status || 'Outro') : 
                  (d.leftQueueReason === 'answered' ? 'Atendida' : 
-                  d.leftQueueReason === 'abandon' ? 'Perdida > 1m' : 
+                  d.leftQueueReason === 'abandon' ? (d.waitTime < 60 ? 'Perdida < 1m' : 'Perdida > 1m') : 
                   d.leftQueueReason === 'pendente' ? 'Pendente' : 'Outro'),
         _dateFormatted: isNaN(d.startTime.getTime()) ? '-' : format(d.startTime, 'dd/MM/yyyy'),
         _searchable: `${callerNumber} ${queue} ${agentName.toLowerCase()} ${ticketNumber} ${subject} ${clientName}`,
@@ -1072,8 +1073,8 @@ function MetricsCards({ data }: { data: CallData[] }) {
   }, [data, localAgent]);
 
   const abandonedCalls = cardsData.filter(d => d.leftQueueReason === 'abandon');
-  const lostLongWait = abandonedCalls.filter(d => d.waitTime > 60);
-  const lostShortWait = abandonedCalls.filter(d => d.waitTime <= 60);
+  const lostLongWait = abandonedCalls.filter(d => d.waitTime >= 60);
+  const lostShortWait = abandonedCalls.filter(d => d.waitTime < 60);
   
   const pendenteCalls = cardsData.filter(d => d.leftQueueReason === 'pendente');
   const answeredCalls = cardsData.filter(d => d.leftQueueReason === 'answered');
@@ -1208,7 +1209,7 @@ function MetricsCards({ data }: { data: CallData[] }) {
                 <div 
                   className="bg-orange-400 h-full transition-all duration-500" 
                   style={{ width: `${shortWaitRate}%` }}
-                  title={`Perdidas <= 1m: ${shortWaitPerc}%`}
+                  title={`Perdidas < 1m: ${shortWaitPerc}%`}
                 />
               </div>
               
@@ -1221,7 +1222,7 @@ function MetricsCards({ data }: { data: CallData[] }) {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-orange-400 shadow-[0_0_8px_rgba(251,146,60,0.5)]" />
-                    <span className="font-medium">Perdidas ≤ 1m: <span className="text-orange-300">{lostShortWait.length}</span> ({shortWaitPerc}%)</span>
+                    <span className="font-medium">Perdidas {'<'} 1m: <span className="text-orange-300">{lostShortWait.length}</span> ({shortWaitPerc}%)</span>
                   </div>
                   <div className="absolute top-full left-4 w-2 h-2 bg-slate-900 rotate-45 -translate-y-1 border-r border-b border-slate-700" />
                 </div>
@@ -1529,7 +1530,7 @@ function ChartAgentPerformance({ data }: { data: CallData[] }) {
       if (reason === 'answered') {
         acc[shortName].chamadas += 1;
       } else if (reason === 'abandon') {
-        if ((call.waitTime || 0) <= 60) {
+        if ((call.waitTime || 0) < 60) {
           acc[shortName].perdidas_baixo_1m += 1;
         } else {
           acc[shortName].abandonos += 1;
@@ -1574,7 +1575,7 @@ function ChartAgentPerformance({ data }: { data: CallData[] }) {
   const activeIdealPoint = useMemo(() => {
     const totalActiveCalls = data.filter(call => {
       const reason = call.leftQueueReason?.toLowerCase() || '';
-      const isShortWait = (call.waitTime || 0) <= 60;
+      const isShortWait = (call.waitTime || 0) < 60;
       
       if (reason === 'answered' && !hiddenKeys.includes('chamadas')) return true;
       if (reason === 'pendente' && !hiddenKeys.includes('pendente')) return true;
@@ -1751,7 +1752,7 @@ function ChartAgentPerformance({ data }: { data: CallData[] }) {
             <div className="p-8 overflow-y-auto">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Stats Summary */}
-                <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-4 gap-4 mb-4">
+                <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-5 gap-4 mb-4">
                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Total Operadores</span>
                       <span className="text-2xl font-black text-slate-900">{techniciansCount}</span>
@@ -1766,6 +1767,12 @@ function ChartAgentPerformance({ data }: { data: CallData[] }) {
                       <span className="text-[10px] font-black text-blue-600/60 uppercase tracking-widest block mb-1">Pendentes</span>
                       <span className="text-2xl font-black text-blue-700">
                         {allAgentsData.reduce((acc: number, a: any) => acc + a.pendente, 0)}
+                      </span>
+                   </div>
+                   <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                      <span className="text-[10px] font-black text-orange-600/60 uppercase tracking-widest block mb-1">Perdidas &lt; 1m</span>
+                      <span className="text-2xl font-black text-orange-700">
+                        {allAgentsData.reduce((acc: number, a: any) => acc + a.perdidas_baixo_1m, 0)}
                       </span>
                    </div>
                    <div className="bg-red-50 p-4 rounded-xl border border-red-100">
@@ -3738,8 +3745,11 @@ const AnalysisOfTicketsView = memo(({ data, allUniqueValues }: { data: CallData[
           </div>
         </div>
 
-        {/* Bottom: Ranking de Recorrência */}
-        <RankingDeRecorrencia data={data} ticketsAnalisados={ticketsAnalisados} onViewDetail={handleQueueClick} />
+        {/* Bottom Partition: Performance and Recurrence Rankings */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <RankingPerformance data={data} />
+          <RankingDeRecorrencia data={data} ticketsAnalisados={ticketsAnalisados} onViewDetail={handleQueueClick} />
+        </div>
       </div>
 
 
@@ -3805,7 +3815,7 @@ function RankingDeRecorrencia({ data, ticketsAnalisados, onViewDetail }: { data:
   }, [data, ticketsAnalisados]);
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[400px]">
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[480px]">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">RANKING DE RECORRÊNCIA</h3>
@@ -3847,6 +3857,163 @@ function RankingDeRecorrencia({ data, ticketsAnalisados, onViewDetail }: { data:
             </div>
           </div>
         ))}
+        {ranking.length === 0 && (
+          <div className="h-full flex items-center justify-center text-slate-400 text-[10px] font-black uppercase">
+            Nenhum dado de recorrência identificado
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RankingPerformance({ data }: { data: CallData[] }) {
+  const [activeTab, setActiveTab] = useState<'score' | 'tickets'>('tickets');
+  
+  const rankings = useMemo(() => {
+    const agentStats = data.reduce((acc, call) => {
+      const name = call.agentName || 'Não atribuído';
+      if (!acc[name]) acc[name] = { tickets: 0, totalSeconds: 0 };
+      acc[name].tickets += 1;
+      
+      const durationStr = call.totalLifeTime || '';
+      const days = parseInt((durationStr.match(/(\d+)d/) || ['0', '0'])[1]);
+      const hours = parseInt((durationStr.match(/(\d+)h/) || ['0', '0'])[1]);
+      const minutes = parseInt((durationStr.match(/(\d+)min/) || (durationStr.match(/(\d+)m/) || ['0', '0']))[1]);
+      
+      acc[name].totalSeconds += (days * 86400) + (hours * 3600) + (minutes * 60);
+      
+      return acc;
+    }, {} as Record<string, { tickets: number, totalSeconds: number }>);
+
+    return Object.entries(agentStats).map(([name, stats]) => {
+      const avgSeconds = stats.tickets > 0 ? stats.totalSeconds / stats.tickets : 0;
+      const avgHours = avgSeconds / 3600;
+      // Score calculation - slightly arbitrary to look like the image scores
+      const ticketsWeight = stats.tickets * 0.05;
+      const timeFactor = avgHours > 0 ? Math.min(5, 48 / (avgHours + 1)) : 5;
+      const score = Math.min(10, parseFloat((ticketsWeight + timeFactor).toFixed(2)));
+      
+      return {
+        name,
+        tickets: stats.tickets,
+        avgSeconds,
+        score
+      };
+    })
+    .sort((a, b) => activeTab === 'score' ? b.score - a.score : b.tickets - a.tickets)
+    .slice(0, 7);
+  }, [data, activeTab]);
+
+  return (
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[480px] overflow-hidden">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-orange-50 text-orange-500 rounded-xl transition-transform hover:scale-105 duration-300">
+             <Trophy className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight leading-none mb-0.5">Ranking de Performance</h3>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Metas semanais</p>
+          </div>
+        </div>
+        <div className="px-2.5 py-1 bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest rounded-lg border border-slate-100/50">
+          TOP 7
+        </div>
+      </div>
+
+      <div className="flex bg-slate-100/50 p-1 rounded-xl mb-6 border border-slate-200/50">
+        <button 
+          onClick={() => setActiveTab('score')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${activeTab === 'score' ? 'bg-white text-blue-600 shadow-sm border border-slate-200/60 ring-1 ring-slate-100/10' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          <Activity className="h-3 w-3" />
+          Por Score
+        </button>
+        <button 
+          onClick={() => setActiveTab('tickets')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${activeTab === 'tickets' ? 'bg-white text-blue-600 shadow-sm border border-slate-200/60 ring-1 ring-slate-100/10' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          <Hash className="h-3 w-3" />
+          Por Tickets
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pr-1">
+        <table className="w-full border-separate border-spacing-y-2">
+          <thead>
+            <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              <th className="text-left px-2 pb-1">Técnico</th>
+              <th className="text-center pb-1">Tickets</th>
+              <th className="text-center pb-1">Média</th>
+              <th className="text-right px-2 pb-1">
+                <div className="flex items-center justify-end gap-1">
+                  Score <Info className="h-3 w-3 opacity-30" />
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rankings.map((item, idx) => {
+               const h = Math.floor(item.avgSeconds / 3600);
+               const m = Math.floor((item.avgSeconds % 3600) / 60);
+               
+               return (
+                <tr key={idx} className="group transition-all duration-300">
+                  <td className="py-2.5 px-2 bg-white group-hover:bg-slate-50/50 rounded-l-xl border-y border-l border-slate-100/50 group-hover:border-blue-100 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-black shadow-sm shrink-0 ${
+                        idx === 0 ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-orange-200' : 
+                        idx === 1 ? 'bg-gradient-to-br from-slate-300 to-slate-400 text-white shadow-slate-100' : 
+                        idx === 2 ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white shadow-amber-100' : 
+                        'bg-slate-50 text-slate-400 border border-slate-100'
+                      }`}>
+                        {idx + 1}
+                      </div>
+                      <span className="text-xs font-bold text-slate-700 tracking-tight group-hover:text-blue-700 transition-colors truncate max-w-[110px]">
+                        {item.name}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="py-2.5 text-center bg-white group-hover:bg-slate-50/50 border-y border-slate-100/50 group-hover:border-blue-100 transition-colors">
+                    <span className="text-xs font-black text-blue-600 tabular-nums">{item.tickets}</span>
+                  </td>
+                  <td className="py-2.5 text-center bg-white group-hover:bg-slate-50/50 border-y border-slate-100/50 group-hover:border-blue-100 transition-colors">
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-[10px] font-black text-slate-600 tabular-nums text-nowrap">
+                        {h > 0 ? `${h}h ` : ''}{m}min
+                      </span>
+                      <div className="w-16 h-1 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full transition-all duration-1000 ${h >= 48 ? 'bg-red-500' : h >= 24 ? 'bg-orange-400' : 'bg-emerald-400'}`} 
+                          style={{ width: `${Math.min(100, (item.avgSeconds / (48 * 3600)) * 100)}%` }} 
+                        />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-2.5 px-2 text-right bg-white group-hover:bg-slate-50/50 rounded-r-xl border-y border-r border-slate-100/50 group-hover:border-blue-100 transition-colors">
+                    <div className="flex flex-col items-end">
+                      <div className={`px-2 py-0.5 rounded-md text-[11px] font-black transition-colors ${
+                        item.score >= 8 ? 'bg-emerald-50 text-emerald-600' :
+                        item.score >= 5 ? 'bg-blue-50 text-blue-600' :
+                        'bg-slate-50 text-slate-500'
+                      }`}>
+                        {item.score.toFixed(2)}
+                      </div>
+                      <span className="text-[7px] font-black text-slate-300 uppercase tracking-widest mt-0.5">Score</span>
+                    </div>
+                  </td>
+                </tr>
+               )
+            })}
+          </tbody>
+        </table>
+        {rankings.length === 0 && (
+          <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-2 py-10">
+            <Activity className="h-8 w-8 opacity-20" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Sem dados no período</span>
+          </div>
+        )}
       </div>
     </div>
   );
