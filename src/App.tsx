@@ -28,76 +28,89 @@ export default function App() {
     setIsLoading(false);
   }, []);
 
-  const processFile = async (file: File): Promise<CallData[]> => {
-    return new Promise((resolve, reject) => {
-      const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
-      const reader = new FileReader();
-
-      reader.onload = (evt) => {
-        try {
-          let text = '';
-          if (isExcel) {
-            const data = new Uint8Array(evt.target?.result as ArrayBuffer);
-            const workbook = XLSX.read(data, { type: 'array' });
-            const firstSheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[firstSheetName];
-            text = XLSX.utils.sheet_to_csv(worksheet);
-          } else {
-            text = evt.target?.result as string;
-          }
-
-          if (typeof text === 'string') {
-            resolve(parseCSVData(text));
-          } else {
-            resolve([]);
-          }
-        } catch (err) {
-          console.error(`Erro ao processar arquivo ${file.name}:`, err);
-          reject(err);
-        }
-      };
-
-      reader.onerror = () => reject(new Error(`Erro ao ler o arquivo ${file.name}`));
-
-      if (isExcel) {
-        reader.readAsArrayBuffer(file);
-      } else {
-        reader.readAsText(file);
-      }
-    });
-  };
-
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
     e.preventDefault();
     setError(null);
-    let files: File[] = [];
-    
+    let files: FileList | null = null;
     if ('dataTransfer' in e) {
-      files = Array.from(e.dataTransfer.files || []);
+      files = e.dataTransfer.files;
     } else {
-      files = Array.from(e.target.files || []);
+      files = e.target.files;
     }
     
-    if (files.length === 0) return;
+    if (!files || files.length === 0) return;
 
     setIsLoading(true);
+    let allParsedData: CallData[] = [];
+    let hasMovidesk = false;
+
+    const processFile = (file: File): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+        const reader = new FileReader();
+        
+        reader.onload = (evt) => {
+          try {
+            let text = '';
+            if (isExcel) {
+              const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+              const workbook = XLSX.read(data, { type: 'array' });
+              const firstSheetName = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[firstSheetName];
+              // Use sheet_to_csv but with raw: false to get formatted strings as seen in Excel
+              text = XLSX.utils.sheet_to_csv(worksheet, { blankrows: false });
+            } else {
+              text = evt.target?.result as string;
+            }
+
+            if (typeof text === 'string') {
+              const parsedData = parseCSVData(text);
+              if (parsedData.length > 0) {
+                allParsedData = [...allParsedData, ...parsedData];
+                if (parsedData.some(d => d.origin === 'Movidesk')) {
+                  hasMovidesk = true;
+                }
+              }
+            }
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        };
+
+        reader.onerror = () => reject(new Error('Erro ao ler arquivo'));
+
+        if (isExcel) {
+          reader.readAsArrayBuffer(file);
+        } else {
+          reader.readAsText(file);
+        }
+      });
+    };
 
     try {
-      const results = await Promise.all(files.map(processFile));
-      const allParsedData = results.flat();
-      
+      const fileArray = Array.from(files);
+      await Promise.all(fileArray.map(file => processFile(file)));
+
       if (allParsedData.length === 0) {
-        setError('Nenhum dado válido encontrado nos arquivos selecionados. Verifique se o formato está correto (GoTo ou Chat).');
+        setError('Nenhum dado válido encontrado nas planilhas selecionadas. Verifique os formatos (GoTo, Chat ou Movidesk).');
       } else {
         setData(prev => [...prev, ...allParsedData]);
+        if (hasMovidesk) {
+          setCurrentPage('chamados');
+        } else {
+          setCurrentPage('atendimentos');
+        }
       }
     } catch (err) {
-      setError('Ocorreu um erro ao processar os arquivos. Certifique-se de que são de um formato compatível.');
+      console.error('Erro ao processar arquivos:', err);
+      setError('Ocorreu um erro ao processar um ou mais arquivos. Certifique-se de que são formatos compatíveis.');
     } finally {
       setIsLoading(false);
-      if ('target' in e && 'value' in (e.target as any)) {
-         (e.target as any).value = '';
-      }
+    }
+    
+    if ('target' in e && 'value' in (e.target as any)) {
+       (e.target as any).value = '';
     }
   };
 
@@ -108,8 +121,8 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#f1f5f9] text-gray-900 font-sans">
       {/* Header / Upload section mapped to top bar style */}
-      <div className="bg-white border-b border-slate-200 shadow-sm mb-6">
-        <div className="max-w-[1400px] mx-auto px-4 md:px-8 pt-4">
+      <div className="bg-white border-b border-slate-200 shadow-sm mb-6 sticky top-0 z-[100]">
+        <div className="max-w-[1600px] mx-auto px-4 lg:px-8 pt-4">
           <div className="flex flex-col md:flex-row justify-between items-center pb-4 gap-4">
             <div className="flex items-center gap-3 w-full md:w-auto">
               <img src="https://i.imgur.com/FOBkZRr.png" alt="LBC" className="h-8 w-auto object-contain" />
@@ -179,7 +192,7 @@ export default function App() {
         </div>
       </div>
 
-      <div className="max-w-[1400px] mx-auto px-4 md:px-8 pb-8 space-y-6">
+      <div className="max-w-[1600px] mx-auto px-4 md:px-8 pb-8 space-y-6">
         
         {/* Error Message */}
         {error && (
@@ -219,7 +232,7 @@ export default function App() {
                 <p className="text-[15px] text-slate-500 leading-relaxed">
                   Arraste e solte seus arquivos <strong className="text-slate-700">.CSV</strong> ou <strong className="text-slate-700">.XLSX</strong> aqui, ou clique para selecionar.
                   <br />
-                  <span className="text-sm text-blue-600 font-medium inline-block mt-3 bg-blue-50 px-3 py-1 rounded-full">Compatível com registros GoTo e Chat</span>
+                  <span className="text-sm text-blue-600 font-medium inline-block mt-3 bg-blue-50 px-3 py-1 rounded-full">Compatível com registros GoTo, Chat e Movidesk</span>
                 </p>
               </div>
               

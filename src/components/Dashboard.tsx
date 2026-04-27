@@ -12,8 +12,8 @@ import {
 } from 'recharts';
 import { 
   Download, UploadCloud, Users, PhoneCall, Clock, PhoneMissed, 
-  ArrowUpDown, Search, Filter, Calendar as CalendarIcon, ChevronDown, Check, X,
-  CheckCircle2, Timer, TrendingUp, Thermometer, Maximize2, Copy, ChevronLeft, ChevronRight, BarChart2, ListTree, SlidersHorizontal
+  ArrowUpDown, Search, Filter, Calendar as CalendarIcon, ChevronDown, ChevronUp, Check, X,
+  CheckCircle2, Timer, TrendingUp, Thermometer, Maximize2, Copy, ChevronLeft, ChevronRight, BarChart2, ListTree, SlidersHorizontal, AlertCircle
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -301,7 +301,7 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
   const [selectedTeam, setSelectedTeam] = useState('Todos');
   const [selectedSchedule, setSelectedSchedule] = useState('Todos');
-  const [originFilter, setOriginFilter] = useState<'All' | 'Chat' | 'GoTo'>('All');
+  const [originFilter, setOriginFilter] = useState<'All' | 'Chat' | 'GoTo' | 'Movidesk'>('All');
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   const [isTeamOpen, setIsTeamOpen] = useState(false);
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
@@ -360,7 +360,10 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
       
       const matchSearch = d.callerNumber.includes(searchTerm) || 
                           d.queue.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          d.agentName.toLowerCase().includes(searchTerm.toLowerCase());
+                          d.agentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (d.ticketNumber && d.ticketNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                          (d.subject && d.subject.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                          (d.clientName && d.clientName.toLowerCase().includes(searchTerm.toLowerCase()));
       
       // If search is active, don't restrict by agent unless the search term is very short
       // This allows seeing all interactions of a specific client number.
@@ -455,59 +458,86 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
     const n1Agents = [...TEAM_MAPPING['Cart. A+B'], ...TEAM_MAPPING['Cart. C+D+E']];
     const n2Agents = TEAM_MAPPING['N2'];
 
-    const metricsData = useMemo(() => {
-      const n1Calls = filteredData.filter(d => n1Agents.some(ag => d.agentName.includes(ag)));
-      const n2Calls = filteredData.filter(d => n2Agents.some(ag => d.agentName.includes(ag)));
+    const AtendimentosView = ({ data: viewData }: { data: CallData[] }) => {
+      const n1Calls = viewData.filter(d => n1Agents.some(ag => d.agentName.includes(ag)));
+      const n2Calls = viewData.filter(d => n2Agents.some(ag => d.agentName.includes(ag)));
 
       const n1Answered = n1Calls.filter(d => d.leftQueueReason === 'answered');
       const n1Total = n1Calls.length;
-      const resolutionN1 = n1Total > 0 ? Math.round((n1Answered.length / n1Total) * 100) : 0;
+      const resN1 = n1Total > 0 ? Math.round((n1Answered.length / n1Total) * 100) : 0;
+      const escRate = viewData.length > 0 ? Math.round((n2Calls.length / viewData.length) * 100) : 0;
+      const avgRespN2 = n2Calls.length > 0 ? Math.round(n2Calls.reduce((acc, curr) => acc + curr.waitTime, 0) / n2Calls.length) : 0;
 
-      const escalationRate = filteredData.length > 0 ? Math.round((n2Calls.length / filteredData.length) * 100) : 0;
+      return (
+        <>
+          <MetricsCards data={viewData} />
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 shrink-0">
+            <ChartCallsOverTime data={viewData} />
+            <ChartAgentPerformance data={viewData} />
+          </div>
 
-      const avgResponseN2 = n2Calls.length > 0 ? Math.round(n2Calls.reduce((acc, curr) => acc + curr.waitTime, 0) / n2Calls.length) : 0;
+          <div className="shrink-0 flex flex-col gap-6">
+            <AgentPerformanceSummary data={viewData} />
+          </div>
 
-      return { resolutionN1, escalationRate, avgResponseN2 };
-    }, [filteredData]);
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 shrink-0 mt-2">
+            <div className="lg:col-span-1 h-full">
+              <ProductivityCalendar data={viewData} />
+            </div>
+            
+            <div className="lg:col-span-1 flex flex-col gap-6">
+              <MetricBox 
+                label="Taxa de Resolução no N1" 
+                value={`${resN1}%`} 
+                icon={CheckCircle2} 
+                color="text-emerald-600"
+                subtitle="Primeiro contato"
+                trend="up"
+                trendValue="Eficiente"
+              />
+              <AdvancedRecurrenceIndex data={viewData} />
+            </div>
 
-    // Consolidate filter for components down below
-    const filteredDataWithoutDate = useMemo(() => {
-      return data.filter(d => {
-        const isVerySpecific = searchTerm.length >= 8 && /^\d+$/.test(searchTerm);
-        
-        const matchSearch = d.callerNumber.includes(searchTerm) || 
-                            d.queue.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            d.agentName.toLowerCase().includes(searchTerm.toLowerCase());
-        
-        let matchAgent = selectedAgents.length === 0 || selectedAgents.includes(d.agentName);
-        if (searchTerm.length >= 4 && d.callerNumber.includes(searchTerm)) {
-          matchAgent = true;
-        }
-        
-        if (d.agentName === 'Ligações Perdidas' && !isVerySpecific) {
-          matchAgent = true;
-        }
-        
-        let matchTeamStrict = true;
-        if (selectedTeam !== 'Todos') {
-          const callTeam = getTeamForCall(d);
-          if (selectedTeam === 'N1') {
-            matchTeamStrict = (callTeam === 'Cart. A+B' || callTeam === 'Cart. C+D+E' || callTeam === 'N1');
-          } else {
-            matchTeamStrict = (callTeam === selectedTeam);
-          }
-        }
+            <div className="lg:col-span-1 flex flex-col gap-6">
+              <MetricBox 
+                label="Volume de Escalonamento" 
+                value={`${escRate}%`} 
+                icon={TrendingUp} 
+                color="text-amber-600"
+                subtitle="N1 para N2"
+                trend="down"
+                trendValue="Sob controle"
+              />
+              <MetricBox 
+                label="Tempo de Resposta N2" 
+                value={formatToHMM(avgRespN2)} 
+                icon={Timer} 
+                color="text-indigo-600"
+                subtitle="Média de espera"
+                trend="neutral"
+                trendValue="Estável"
+              />
+            </div>
+          </div>
 
-        const matchSchedule = selectedSchedule === 'Todos' || getCallSchedule(d.startTime, d.queue) === selectedSchedule;
-        
-        return matchSearch && matchAgent && matchTeamStrict && matchSchedule;
-      });
-    }, [data, selectedTeam, selectedSchedule, searchTerm, selectedAgents]);
+          <div className="shrink-0">
+            <RecurringAgentsCard 
+              data={viewData} 
+              onFilter={(num) => setSearchTerm(prev => prev === num ? '' : num)} 
+              activeFilter={searchTerm}
+            />
+          </div>
+
+          <LogsTable data={viewData} />
+        </>
+      );
+    };
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 lg:p-8 font-sans transition-all duration-500">
       <div className="max-w-[1600px] mx-auto space-y-8">
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sticky top-0 z-[70] w-full transition-all duration-300">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sticky top-[112px] z-[70] w-full transition-all duration-300">
         <div className="flex items-center gap-2 mb-4 text-slate-800">
           <SlidersHorizontal className="h-[18px] w-[18px] text-[#2563eb]" strokeWidth={2.5} />
           <h3 className="font-extrabold text-[#1e293b] text-sm uppercase tracking-wide">Painel de Filtros</h3>
@@ -694,6 +724,12 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
                 >
                   GoTo
                 </button>
+                <button
+                  onClick={() => setOriginFilter('Movidesk')}
+                  className={`px-3 py-1 text-[11px] font-bold rounded-full transition-all h-full flex items-center justify-center ${originFilter === 'Movidesk' ? 'bg-white text-[#2563eb] shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Movis
+                </button>
               </div>
             </div>
 
@@ -714,69 +750,10 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
 
       {view === 'atendimentos' ? (
         <>
-          <MetricsCards data={filteredData} />
-          
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 shrink-0">
-            <ChartCallsOverTime data={filteredData} />
-            <ChartAgentPerformance data={filteredData} />
-          </div>
-
-          <div className="shrink-0 flex flex-col gap-6">
-            <AgentPerformanceSummary data={filteredData} />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 shrink-0 mt-2">
-            <div className="lg:col-span-1 h-full">
-              <ProductivityCalendar data={filteredDataWithoutDate} />
-            </div>
-            
-            <div className="lg:col-span-1 flex flex-col gap-6">
-              <MetricBox 
-                label="Taxa de Resolução no N1" 
-                value={`${metricsData.resolutionN1}%`} 
-                icon={CheckCircle2} 
-                color="text-emerald-600"
-                subtitle="Primeiro contato"
-                trend="up"
-                trendValue="Eficiente"
-              />
-              <AdvancedRecurrenceIndex data={filteredData} />
-            </div>
-
-            <div className="lg:col-span-1 flex flex-col gap-6">
-              <MetricBox 
-                label="Volume de Escalonamento" 
-                value={`${metricsData.escalationRate}%`} 
-                icon={TrendingUp} 
-                color="text-amber-600"
-                subtitle="N1 para N2"
-                trend="down"
-                trendValue="Sob controle"
-              />
-              <MetricBox 
-                label="Tempo de Resposta N2" 
-                value={formatToHMM(metricsData.avgResponseN2)} 
-                icon={Timer} 
-                color="text-indigo-600"
-                subtitle="Média de espera"
-                trend="neutral"
-                trendValue="Estável"
-              />
-            </div>
-          </div>
-
-          <div className="shrink-0">
-            <RecurringAgentsCard 
-              data={filteredData} 
-              onFilter={(num) => setSearchTerm(prev => prev === num ? '' : num)} 
-              activeFilter={searchTerm}
-            />
-          </div>
-
-          <DataTable data={filteredData} />
+          <AtendimentosView data={filteredData.filter(d => d.origin !== 'Movidesk')} />
         </>
       ) : (
-        <AnalysisOfTicketsView data={filteredData} />
+        <AnalysisOfTicketsView data={filteredData.filter(d => d.origin === 'Movidesk')} />
       )}
     </div>
   </div>
@@ -789,7 +766,8 @@ function MetricBox({
   icon: Icon, 
   color, 
   subtitle,
-  trendValue
+  trendValue,
+  className
 }: { 
   label: string, 
   value: string, 
@@ -797,45 +775,73 @@ function MetricBox({
   color: string,
   subtitle?: string,
   trend?: 'up' | 'down' | 'neutral',
-  trendValue?: string
+  trendValue?: string,
+  className?: string
 }) {
+  const isVeryLong = value.length > 25;
+  const isMediumLong = value.length > 12 && value.length <= 25;
+  
   return (
-    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between h-[200px] group transition-all duration-300 hover:shadow-indigo-500/10">
+    <div className={`bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between h-[200px] group transition-all duration-300 hover:shadow-indigo-500/10 ${className || ''}`}>
       {/* Abstract pattern background */}
       <div className="absolute inset-0 opacity-10 pointer-events-none overflow-hidden">
          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -mr-32 -mt-32" />
          <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl -ml-24 -mb-24" />
       </div>
 
-      <div className="relative z-10 flex items-center justify-between">
-         <div className="flex items-center gap-3">
-            <div className={`p-2.5 bg-slate-50 rounded-xl ${color} border border-slate-100 group-hover:scale-110 transition-transform`}>
+      <div className="relative z-10 flex items-center">
+         <div className="flex items-center gap-3 w-full">
+            <div className={`p-2.5 bg-slate-50 rounded-xl ${color} border border-slate-100 group-hover:scale-110 transition-transform shrink-0`}>
                <Icon className="h-5 w-5" />
             </div>
-            <div>
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">{label}</h4>
-              <p className="text-[8px] text-slate-500 uppercase font-black mt-1">Live updates</p>
+            <div className="min-w-0 flex-1">
+              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none truncate">{label}</h4>
+              <div className="flex items-center justify-between gap-4 mt-1">
+                <p className="text-[8px] text-slate-500 uppercase font-black shrink-0">Live updates</p>
+                {trendValue && (
+                  <div className="bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter border border-indigo-500/10 shrink-0 whitespace-nowrap">
+                    {trendValue}
+                  </div>
+                )}
+              </div>
             </div>
          </div>
-         {trendValue && (
-           <div className="bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter border border-indigo-500/10">
-             {trendValue}
-           </div>
-         )}
       </div>
 
-      <div className="relative z-10 flex flex-col items-center justify-center flex-1 my-2">
-          <span className="text-5xl font-black text-slate-900 tracking-tighter leading-none group-hover:scale-105 transition-transform duration-500">{value}</span>
-          <div className="h-1 w-12 bg-indigo-500 rounded-full mt-3 opacity-50" />
+      <div className="relative z-10 flex flex-col items-center justify-center flex-1 my-2 overflow-hidden w-full">
+          <div className="w-full relative flex justify-center items-center overflow-hidden h-full">
+            {isVeryLong ? (
+              <div className="w-full overflow-hidden flex whitespace-nowrap mask-fade">
+                <motion.div
+                  animate={{ x: [0, -100 + "%"] }}
+                  transition={{
+                    duration: 20,
+                    repeat: Infinity,
+                    ease: "linear"
+                  }}
+                  className="flex"
+                >
+                  <span className="text-lg font-black text-slate-900 tracking-tight pr-12">{value}</span>
+                  <span className="text-lg font-black text-slate-900 tracking-tight pr-12">{value}</span>
+                  <span className="text-lg font-black text-slate-900 tracking-tight pr-12">{value}</span>
+                </motion.div>
+              </div>
+            ) : (
+              <span className={`font-black text-slate-900 tracking-tighter leading-tight text-center ${isMediumLong ? 'text-xl' : 'text-5xl leading-none'}`}>
+                {value}
+              </span>
+            )}
+          </div>
+          <div className="h-1 w-12 bg-indigo-500 rounded-full mt-3 opacity-50 shrink-0" />
       </div>
 
       <div className="relative z-10 flex items-end justify-between pt-3 border-t border-slate-100">
-        <div className="flex flex-col">
-           <span className="text-[10px] font-black text-slate-900">{subtitle || 'Métrica'}</span>
+        <div className="flex flex-col min-w-0 flex-1">
+           <span className="text-[10px] font-black text-slate-900 truncate">{subtitle || 'Métrica'}</span>
            <span className="text-[8px] text-slate-500 uppercase font-black tracking-widest leading-none">Status Atual</span>
         </div>
         
-        <div className="flex gap-1 items-end h-6">
+        <div className="flex gap-1 items-end h-6 shrink-0 ml-2">
           {[30, 60, 45, 90, 55].map((h, i) => (
             <div key={i} className={`w-1 rounded-full bg-indigo-500/20`} style={{ height: `${h}%` }} />
           ))}
@@ -2537,6 +2543,236 @@ function AgentPerformanceSummary({ data }: { data: CallData[] }) {
   );
 }
 
+function LogsTable({ data }: { data: CallData[] }) {
+  const [sortCol, setSortCol] = useState<keyof CallData | null>('startTime');
+  const [sortDesc, setSortDesc] = useState(true);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleSort = (col: keyof CallData) => {
+    if (sortCol === col) {
+      setSortDesc(!sortDesc);
+    } else {
+      setSortCol(col);
+      setSortDesc(true);
+    }
+  };
+
+  const handleExport = () => {
+    const headers = ["Ticket", "Origem", "Data", "Espera", "Hora Inicio", "Hora Fim", "Conversa", "Telefone", "Operador", "Fila", "Status"];
+    const csvData = data.map(call => {
+      const startTime = new Date(call.startTime);
+      const endTime = new Date(startTime.getTime() + (call.talkDuration * 1000));
+      const status = call.leftQueueReason === 'answered' ? 'Atendida' : 
+                     call.leftQueueReason === 'abandon' ? 'Perdida' : call.leftQueueReason || '-';
+      
+      return [
+        call.ticketNumber || '-',
+        call.origin,
+        format(startTime, 'dd/MM/yyyy'),
+        formatSeconds(call.waitTime),
+        format(startTime, 'HH:mm:ss'),
+        format(endTime, 'HH:mm:ss'),
+        formatSeconds(call.talkDuration),
+        call.callerNumber,
+        call.agentName,
+        call.queue,
+        status
+      ].join(';');
+    });
+
+    const csvContent = [headers.join(';'), ...csvData].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `logs-atendimento-${format(new Date(), 'dd-MM-yyyy')}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const sortedData = useMemo(() => {
+    if (!sortCol) return data;
+    return [...data].sort((a, b) => {
+      let valA = a[sortCol];
+      let valB = b[sortCol];
+      
+      if (valA instanceof Date && valB instanceof Date) {
+        return sortDesc ? valB.getTime() - valA.getTime() : valA.getTime() - valB.getTime();
+      }
+      
+      if (typeof valA === 'string' && typeof valB === 'string') {
+        return sortDesc ? valB.localeCompare(valA) : valA.localeCompare(valB);
+      }
+      
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return sortDesc ? valB - valA : valA - valB;
+      }
+      return 0;
+    });
+  }, [data, sortCol, sortDesc]);
+
+  const Th = ({ label, colKey, extraClass = "" }: { label: string, colKey: keyof CallData, extraClass?: string }) => (
+    <th 
+      className={`p-4 cursor-pointer hover:text-indigo-600 transition-colors select-none whitespace-nowrap bg-slate-50/80 backdrop-blur-sm border-b border-slate-200 ${extraClass}`}
+      onClick={() => handleSort(colKey)}
+    >
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</span>
+        {sortCol === colKey && (
+          sortDesc ? <ChevronDown className="h-3 w-3 text-indigo-500" /> : <ChevronUp className="h-3 w-3 text-indigo-500" />
+        )}
+      </div>
+    </th>
+  );
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 flex-1 flex flex-col overflow-hidden shadow-sm h-[600px] mt-6">
+      <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-1 bg-blue-600 rounded-full" />
+          <h2 className="text-sm font-black text-slate-800 uppercase tracking-tight">Logs de Atendimento</h2>
+          <AnimatePresence>
+            {copiedId && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                className="bg-emerald-500 text-white text-[10px] px-3 py-1 rounded-full font-bold shadow-lg shadow-emerald-200 flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="h-3 w-3" />
+                Ticket {copiedId} Copiado
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+        <button 
+          onClick={handleExport}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-500/20 active:scale-95"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Exportar
+        </button>
+      </div>
+      <div className="overflow-x-auto flex-1 h-full overflow-y-auto custom-scrollbar">
+        <table className="w-full text-left border-collapse">
+          <thead className="sticky top-0 z-20 text-[10px]">
+            <tr>
+              <Th label="Ticket" colKey="ticketNumber" extraClass="w-[100px] min-w-[100px] max-w-[100px]" />
+              <Th label="Origem" colKey="origin" />
+              <Th label="Data" colKey="startTime" />
+              <Th label="Espera" colKey="waitTime" />
+              <Th label="Hora Inicio" colKey="startTime" />
+              <Th label="Hora Fim" colKey="startTime" />
+              <Th label="Conversa" colKey="talkDuration" />
+              <Th label="Telefone" colKey="callerNumber" />
+              <Th label="Operador" colKey="agentName" />
+              <Th label="Fila" colKey="queue" />
+              <Th label="Status" colKey="leftQueueReason" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 text-[11px]">
+            {sortedData.map((call, idx) => {
+              const status = call.leftQueueReason === 'answered' ? 'Atendida' : 
+                             call.leftQueueReason === 'abandon' ? 'Perdida' : call.leftQueueReason || '-';
+              
+              const statusColors = call.leftQueueReason === 'answered' 
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                : 'bg-rose-50 text-rose-700 border-rose-200';
+              
+              const startTime = new Date(call.startTime);
+              const endTime = new Date(startTime.getTime() + (call.talkDuration * 1000));
+              
+              const handleCopyTicket = (ticket: string | undefined) => {
+                if (!ticket) return;
+                navigator.clipboard.writeText(ticket);
+                setCopiedId(ticket);
+                setTimeout(() => setCopiedId(null), 2000);
+              };
+
+              return (
+                <tr key={idx} className="group hover:bg-slate-50/80 transition-colors">
+                  <td className="p-4 w-[100px] min-w-[100px] max-w-[100px]">
+                    <div className="flex items-center gap-1.5">
+                      {call.ticketNumber ? (
+                        <>
+                          <div className="bg-blue-50 border border-blue-100 rounded-lg px-2 py-1.5 flex items-center justify-center min-w-[60px]">
+                            <a 
+                              href={`https://atendimento.movidesk.com/Ticket/Details/${call.ticketNumber}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-700 font-black hover:text-blue-800 transition-colors text-[11px] font-mono"
+                            >
+                              {call.ticketNumber}
+                            </a>
+                          </div>
+                          <button 
+                            onClick={() => handleCopyTicket(call.ticketNumber)}
+                            className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-400 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all flex items-center justify-center shadow-sm"
+                            title="Copiar Ticket"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-slate-300">-</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="p-4 whitespace-nowrap">
+                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border ${
+                      call.origin === 'Chat' ? 'bg-teal-50 text-teal-700 border-teal-100' :
+                      call.origin === 'GoTo' ? 'bg-orange-50 text-orange-700 border-orange-100' :
+                      'bg-indigo-50 text-indigo-700 border-indigo-100'
+                    }`}>
+                      {call.origin}
+                    </span>
+                  </td>
+                  <td className="p-4 whitespace-nowrap font-medium text-slate-600">
+                    {format(startTime, 'dd/MM/yyyy')}
+                  </td>
+                  <td className="p-4 font-mono text-slate-500">
+                    {formatSeconds(call.waitTime)}
+                  </td>
+                  <td className="p-4 whitespace-nowrap font-mono text-slate-500">
+                    {format(startTime, 'HH:mm:ss')}
+                  </td>
+                  <td className="p-4 whitespace-nowrap font-mono text-slate-500">
+                    {format(endTime, 'HH:mm:ss')}
+                  </td>
+                  <td className="p-4 font-mono text-indigo-700 font-bold">
+                    {formatSeconds(call.talkDuration)}
+                  </td>
+                  <td className="p-4 font-mono text-slate-500">
+                    {formatPhone(call.callerNumber)}
+                  </td>
+                  <td className="p-4 font-semibold text-slate-700">
+                    {formatAgentName(call.agentName)}
+                  </td>
+                  <td className="p-4 text-slate-600 max-w-[150px] truncate" title={call.queue}>
+                    {call.queue}
+                  </td>
+                  <td className="p-4 whitespace-nowrap">
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border ${statusColors}`}>
+                      {status}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {sortedData.length === 0 && (
+          <div className="p-8 text-center text-slate-500 text-xs">
+            Nenhum dado encontrado com os filtros aplicados.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DataTable({ data }: { data: CallData[] }) {
   const [sortCol, setSortCol] = useState<keyof CallData | null>('startTime');
   const [sortDesc, setSortDesc] = useState(false);
@@ -2573,28 +2809,38 @@ function DataTable({ data }: { data: CallData[] }) {
   }, [data, sortCol, sortDesc]);
 
   const exportCSV = () => {
-    const head = ['Nº Ticket', 'Origem', 'Data', 'Hora (Entrada)', 'Tempo de Espera', 'Hora Início', 'Hora Fim', 'Tempo de Conversa', 'Número', 'Fila', 'Operador', 'Status'].join(';');
-    const rows = sortedData.map(d => {
-      const statusLbl = d.leftQueueReason === 'answered' ? 'Atendida' : 
-                        d.leftQueueReason === 'abandon' ? 'Perdida > 1m' : 
-                        d.leftQueueReason === 'pendente' ? 'Pendente' : d.leftQueueReason;
-                        
-      const horaInicioTime = new Date(d.startTime.getTime() + d.waitTime * 1000);
-      const horaFimTime = new Date(horaInicioTime.getTime() + d.talkDuration * 1000);
+    const head = [
+      'N Ticket', 'Origem', 'Aberto em', 'Movimentado em', 'Resolvido em', 
+      'Responsável: Equipe', 'Criado por', 'Responsável', 'Status', 'Assunto', 
+      'Descrição do Ticket', 'Urgência', 'Tags', 'Cliente (Completo)', 
+      'Cliente: CPF / CNPJ (Pessoa)', 'Serviço (Completo)', 'Tipo', 
+      'SLA N2 - 1ª Entrada', 'SLA N2 - 1ª Saída', '1° Resposta (Horas Corridas)', 
+      'Tempo de vida (Horas corridas)'
+    ].join(';');
 
+    const rows = sortedData.map(d => {
       return [
         `"${d.ticketNumber || ''}"`,
         `"${d.origin}"`,
-        format(d.startTime, 'dd/MM/yyyy'),
-        format(d.startTime, 'HH:mm:ss'),
-        `"${formatSeconds(d.waitTime)}"`,
-        format(horaInicioTime, 'HH:mm:ss'),
-        format(horaFimTime, 'HH:mm:ss'),
-        `"${formatSeconds(d.talkDuration)}"`,
-        `"${formatPhone(d.callerNumber)}"`,
-        `"${d.queue}"`,
+        `"${d.startTimeString || ''}"`,
+        `"${d.movedAt || ''}"`,
+        `"${d.resolutionDate ? format(d.resolutionDate, 'dd/MM/yyyy') : ''}"`,
+        `"${d.team || ''}"`,
+        `"${d.createdBy || ''}"`,
         `"${formatAgentName(d.agentName)}"`,
-        `"${statusLbl}"`
+        `"${d.status || ''}"`,
+        `"${d.subject || ''}"`,
+        `"${d.description || ''}"`,
+        `"${d.urgency || ''}"`,
+        `"${d.tags || ''}"`,
+        `"${d.clientName || ''}"`,
+        `"${d.cnpj || ''}"`,
+        `"${d.service || ''}"`,
+        `"${d.type || ''}"`,
+        `"${d.slaN2FirstEntry || ''}"`,
+        `"${d.slaN2FirstExit || ''}"`,
+        `"${d.firstResponseTime || ''}"`,
+        `"${d.totalLifeTime || ''}"`
       ].join(';');
     });
     
@@ -2602,156 +2848,204 @@ function DataTable({ data }: { data: CallData[] }) {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `exportacao_ligacoes_${format(new Date(), 'ddMMyyyy_HHmmss')}.csv`);
+    link.setAttribute("download", `exportacao_tickets_${format(new Date(), 'ddMMyyyy_HHmmss')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const Th = ({ label, colKey, align = "left" }: { label: string, colKey: keyof CallData, align?: "left" | "center" | "right" }) => (
+  const Th = ({ label, colKey, align = "left", extraClass = "" }: { label: string, colKey: keyof CallData, align?: "left" | "center" | "right", extraClass?: string }) => (
     <th 
-      className={`p-3 cursor-pointer hover:text-indigo-600 transition-colors select-none whitespace-nowrap text-${align}`}
+      className={`p-4 cursor-pointer hover:text-indigo-600 transition-colors select-none whitespace-nowrap text-${align} bg-slate-50/80 backdrop-blur-sm border-b border-slate-200 ${extraClass}`}
       onClick={() => handleSort(colKey)}
     >
-      {label} {sortCol === colKey && (sortDesc ? '↓' : '↑')}
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</span>
+        {sortCol === colKey && (
+          sortDesc ? <ChevronDown className="h-3 w-3 text-indigo-500" /> : <ChevronUp className="h-3 w-3 text-indigo-500" />
+        )}
+      </div>
     </th>
   );
 
+  const getStatusBadge = (status: string | undefined) => {
+    if (!status) return null;
+    const s = status.toLowerCase();
+    let config = { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200' };
+    
+    if (s.includes('resolvido') || s.includes('finalizado') || s === 'answered') {
+      config = { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' };
+    } else if (s.includes('novo') || s === 'pendente') {
+      config = { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' };
+    } else if (s.includes('cancelado') || s === 'abandon') {
+      config = { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200' };
+    } else if (s.includes('atendimento')) {
+      config = { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' };
+    }
+
+    return (
+      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border ${config.bg} ${config.text} ${config.border} whitespace-nowrap`}>
+        {status === 'answered' ? 'Atendida' : status === 'abandon' ? 'Perdida' : status}
+      </span>
+    );
+  };
+
+  const getUrgencyBadge = (urgency: string | undefined) => {
+    if (!urgency) return <span className="text-slate-300">-</span>;
+    const u = urgency.toLowerCase();
+    let color = 'text-slate-500';
+    if (u.includes('alta') || u.includes('urgente')) color = 'text-rose-600 font-bold';
+    if (u.includes('media')) color = 'text-amber-600 font-bold';
+    if (u.includes('baixa')) color = 'text-emerald-600 font-bold';
+    
+    return <span className={`text-[10px] uppercase tracking-tight ${color}`}>{urgency}</span>;
+  };
+
+  const getOriginBadge = (origin: string) => {
+    const colors: Record<string, string> = {
+      'Movidesk': 'bg-indigo-50 text-indigo-700 border-indigo-100',
+      'Chat': 'bg-teal-50 text-teal-700 border-teal-100',
+      'GoTo': 'bg-orange-50 text-orange-700 border-orange-100'
+    };
+    return (
+      <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border ${colors[origin] || 'bg-slate-50'}`}>
+        {origin}
+      </span>
+    );
+  };
+
+  const formatCellDate = (val: Date | string | undefined) => {
+    if (!val) return '-';
+    if (val instanceof Date) return format(val, 'dd/MM/yyyy HH:mm');
+    return val;
+  };
+
   return (
-    <div className="bg-white rounded-xl border border-slate-200 flex-1 flex flex-col overflow-hidden shadow-sm h-[400px]">
-      <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+    <div className="bg-white rounded-2xl border border-slate-200 flex-1 flex flex-col overflow-hidden shadow-sm h-[600px]">
+      <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white">
         <div className="flex items-center gap-3">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Logs de Chamadas</span>
+          <div className="h-8 w-1 bg-blue-600 rounded-full" />
+          <h2 className="text-sm font-black text-slate-800 uppercase tracking-tight">Histórico de Tickets</h2>
           <AnimatePresence>
             {copiedId && (
               <motion.div 
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                className="bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold shadow-sm flex items-center gap-1"
+                initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                className="bg-emerald-500 text-white text-[10px] px-3 py-1 rounded-full font-bold shadow-lg shadow-emerald-200 flex items-center gap-1.5"
               >
-                <Check className="h-3 w-3" />
-                Ticket {copiedId} Copiado!
+                <CheckCircle2 className="h-3 w-3" />
+                Ticket {copiedId} Copiado
               </motion.div>
             )}
           </AnimatePresence>
         </div>
         <button 
           onClick={exportCSV}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md text-[11px] font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2 tracking-wide uppercase shadow-sm"
+          className="bg-blue-600 text-white px-5 py-2 rounded-xl text-[11px] font-bold hover:bg-blue-700 active:scale-95 transition-all flex items-center gap-2 tracking-wide uppercase shadow-md shadow-blue-500/20"
         >
-          <Download className="h-3 w-3" />
-          Exportar CSV
+          <Download className="h-3.5 w-3.5" />
+          Exportar Base (CSV)
         </button>
       </div>
-      <div className="overflow-x-auto flex-1 h-full overflow-y-auto">
-        <table className="w-full text-left">
-          <thead className="text-[11px] font-semibold text-slate-500 border-b border-slate-100 uppercase bg-white sticky top-0 z-10">
+      <div className="overflow-x-auto flex-1 h-full overflow-y-auto custom-scrollbar">
+        <table className="w-full text-left border-collapse">
+          <thead className="sticky top-0 z-20">
             <tr>
-              <Th label="Nº Ticket" colKey="ticketNumber" />
+              <Th label="N Ticket" colKey="ticketNumber" extraClass="w-[100px] min-w-[100px] max-w-[100px]" />
               <Th label="Origem" colKey="origin" />
-              <Th label="Data" colKey="startTime" />
-              <Th label="Hora" colKey="startTime" />
-              <Th label="Tempo de Espera" colKey="waitTime" align="center" />
-              <Th label="Hora Início" colKey="startTime" />
-              <Th label="Hora Fim" colKey="startTime" />
-              <Th label="Tempo de Conversa" colKey="talkDuration" align="center" />
-              <Th label="Número" colKey="callerNumber" />
-              <Th label="Fila" colKey="queue" />
-              <Th label="Operador" colKey="agentName" />
-              <Th label="Status" colKey="leftQueueReason" />
+              <Th label="Aberto em" colKey="startTime" />
+              <Th label="Movimentado em" colKey="movedAt" />
+              <Th label="Resolvido em" colKey="resolutionDate" />
+              <Th label="Responsável: Equipe" colKey="team" />
+              <Th label="Criado por" colKey="createdBy" />
+              <Th label="Responsável" colKey="agentName" />
+              <Th label="Status" colKey="status" />
+              <Th label="Assunto" colKey="subject" />
+              <Th label="Descrição do Ticket" colKey="description" />
+              <Th label="Urgência" colKey="urgency" />
+              <Th label="Tags" colKey="tags" />
+              <Th label="Cliente (Completo)" colKey="clientName" />
+              <Th label="Cliente: CPF / CNPJ (Pessoa)" colKey="cnpj" />
+              <Th label="Serviço (Completo)" colKey="service" />
+              <Th label="Tipo" colKey="type" />
+              <Th label="SLA N2 - 1ª Entrada" colKey="slaN2FirstEntry" />
+              <Th label="SLA N2 - 1ª Saída" colKey="slaN2FirstExit" />
+              <Th label="1° Resposta (Horas Corridas)" colKey="firstResponseTime" />
+              <Th label="Tempo de vida (Horas corridas)" colKey="totalLifeTime" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-50 text-[11px] font-mono">
+          <tbody className="divide-y divide-slate-100 text-[11px]">
             {sortedData.map((call, idx) => {
-              const horaInicioTime = new Date(call.startTime.getTime() + call.waitTime * 1000);
-              const horaFimTime = new Date(horaInicioTime.getTime() + call.talkDuration * 1000);
-              
-              const handleCopyTicket = (e: React.MouseEvent, ticket: string | undefined) => {
-                e.stopPropagation();
+              const handleCopyTicket = (ticket: string | undefined) => {
                 if (!ticket) return;
                 navigator.clipboard.writeText(ticket);
                 setCopiedId(ticket);
                 setTimeout(() => setCopiedId(null), 2000);
               };
 
-              const isRecentlyCopied = copiedId === call.ticketNumber;
-
               return (
-              <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                <td className="p-3">
-                   {call.ticketNumber ? (
-                     <div className="flex items-center gap-1">
-                       <button 
-                         onClick={() => window.open(`https://lbc.movidesk.com/Ticket/Edit/${call.ticketNumber}`, 'movidesk_window')}
-                         className="flex-1 text-left bg-blue-50 border border-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 font-mono font-bold px-2 py-1 rounded transition-colors w-fit max-w-[90px] truncate"
-                         title="Abrir no Movidesk"
-                       >
-                         {call.ticketNumber}
-                       </button>
-                       <button 
-                         onClick={(e) => handleCopyTicket(e, call.ticketNumber)}
-                         className={`p-1 rounded border transition-all duration-200 ${
-                           isRecentlyCopied 
-                             ? 'bg-emerald-50 border-emerald-300 text-emerald-700 shadow-inner' 
-                             : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-indigo-400 hover:bg-white hover:text-indigo-600 hover:shadow-sm'
-                         }`}
-                         title="Clique para copiar"
-                       >
-                         {isRecentlyCopied ? (
-                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 animate-in zoom-in duration-300" />
-                         ) : (
-                           <Copy className="h-3.5 w-3.5" />
-                         )}
-                       </button>
-                     </div>
-                   ) : (
-                     <span className="text-slate-300 px-2">-</span>
-                   )}
+              <tr key={idx} className="group hover:bg-slate-50/80 transition-colors cursor-default">
+                <td className="p-4 w-[100px] min-w-[100px] max-w-[100px]">
+                  <div className="flex items-center gap-1.5">
+                    {call.ticketNumber ? (
+                      <>
+                        <div className="bg-blue-50 border border-blue-100 rounded-lg px-2 py-1.5 flex items-center justify-center min-w-[60px]">
+                          <a 
+                            href={`https://atendimento.movidesk.com/Ticket/Details/${call.ticketNumber}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-700 font-black hover:text-blue-800 transition-colors text-[11px] font-mono"
+                          >
+                            {call.ticketNumber}
+                          </a>
+                        </div>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCopyTicket(call.ticketNumber);
+                          }}
+                          className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-400 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all flex items-center justify-center shadow-sm"
+                          title="Copiar Ticket"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-slate-300">-</span>
+                    )}
+                  </div>
                 </td>
-                <td className="p-3">
-                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                    call.origin === 'Chat' ? 'bg-teal-50 text-teal-700 border border-teal-100' : 'bg-orange-50 text-orange-700 border border-orange-100'
-                  }`}>
-                    {call.origin}
-                  </span>
+                <td className="p-4">{getOriginBadge(call.origin)}</td>
+                <td className="p-4 font-medium text-slate-600 whitespace-nowrap">
+                  {formatCellDate(call.startTime)}
                 </td>
-                <td className="p-3 text-slate-500 whitespace-nowrap">
-                  {format(call.startTime, 'dd/MM/yyyy')}
+                <td className="p-4 text-slate-500 whitespace-nowrap italic">{formatCellDate(call.movedAt)}</td>
+                <td className="p-4 font-bold text-slate-700 whitespace-nowrap">
+                  {formatCellDate(call.resolutionDate)}
                 </td>
-                <td className="p-3 text-slate-500 whitespace-nowrap">
-                  {format(call.startTime, 'HH:mm:ss')}
+                <td className="p-4 text-slate-600 whitespace-nowrap">{call.team || '-'}</td>
+                <td className="p-4 text-slate-500 whitespace-nowrap truncate max-w-[120px]" title={call.createdBy}>{call.createdBy || '-'}</td>
+                <td className="p-4 font-semibold text-slate-700 whitespace-nowrap">{formatAgentName(call.agentName)}</td>
+                <td className="p-4">{getStatusBadge(call.status || call.leftQueueReason)}</td>
+                <td className="p-4 text-slate-600 truncate max-w-[200px]" title={call.subject}>{call.subject || '-'}</td>
+                <td className="p-4 text-slate-400 truncate max-w-[200px]" title={call.description}>{call.description || '-'}</td>
+                <td className="p-4">{getUrgencyBadge(call.urgency)}</td>
+                <td className="p-4">
+                   <div className="flex flex-wrap gap-1">
+                      {call.tags?.split(',').map((tag, tIdx) => (
+                        <span key={tIdx} className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase">{tag.trim()}</span>
+                      )) || '-'}
+                   </div>
                 </td>
-                <td className="p-3 text-slate-600 text-center">{formatSeconds(call.waitTime)}</td>
-                <td className="p-3 font-semibold text-indigo-700 whitespace-nowrap">
-                  {format(horaInicioTime, 'HH:mm:ss')}
-                </td>
-                <td className="p-3 font-semibold text-slate-600 whitespace-nowrap">
-                  {format(horaFimTime, 'HH:mm:ss')}
-                </td>
-                <td className="p-3 text-center">
-                  <CustomTooltip title="Métricas de Atendimento (SLA)" items={SLA_METRICS}>
-                    <span className={`font-bold cursor-help transition-all ${getSlaColor(call.talkDuration)}`}>
-                      {formatSeconds(call.talkDuration)}
-                    </span>
-                  </CustomTooltip>
-                </td>
-                <td className="p-3 font-bold text-slate-900 whitespace-nowrap">{formatPhone(call.callerNumber)}</td>
-                <td className="p-3 truncate max-w-[150px] text-slate-600" title={call.queue}>{call.queue}</td>
-                <td className="p-3 truncate max-w-[200px] text-slate-700" title={call.agentName}>
-                  {formatAgentName(call.agentName)}
-                </td>
-                <td className="p-3">
-                  <span className={`px-2 py-0.5 rounded uppercase font-bold text-[9px] tracking-wider whitespace-nowrap ${
-                    call.leftQueueReason === 'answered' ? 'bg-emerald-100 text-emerald-700' :
-                    call.leftQueueReason === 'abandon' ? 'bg-red-100 text-red-700' : 
-                    call.leftQueueReason === 'pendente' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'
-                  }`}>
-                    {call.leftQueueReason === 'answered' ? 'Atendida' : 
-                     call.leftQueueReason === 'abandon' ? 'Perdida > 1m' : 
-                     call.leftQueueReason === 'pendente' ? 'Pendente' : call.leftQueueReason}
-                  </span>
-                </td>
+                <td className="p-4 font-bold text-slate-900 whitespace-nowrap truncate max-w-[200px]" title={call.clientName}>{call.clientName || '-'}</td>
+                <td className="p-4 font-mono text-slate-500 tabular-nums">{call.cnpj || '-'}</td>
+                <td className="p-4 text-slate-600 truncate max-w-[180px]" title={call.service}>{call.service || '-'}</td>
+                <td className="p-4 text-slate-500">{call.type || '-'}</td>
+                <td className="p-4 text-slate-600 whitespace-nowrap">{formatCellDate(call.slaN2FirstEntry)}</td>
+                <td className="p-4 text-slate-600 whitespace-nowrap">{formatCellDate(call.slaN2FirstExit)}</td>
+                <td className="p-4 text-slate-600 font-bold tabular-nums">{call.firstResponseTime || '-'}</td>
+                <td className="p-4 text-indigo-700 font-black tabular-nums whitespace-nowrap">{call.totalLifeTime || '-'}</td>
               </tr>
             )})}
           </tbody>
@@ -2767,9 +3061,27 @@ function DataTable({ data }: { data: CallData[] }) {
 }
 
 function AnalysisOfTicketsView({ data }: { data: CallData[] }) {
+  const [selectedQueue, setSelectedQueue] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const n1Agents = useMemo(() => [...TEAM_MAPPING['Cart. A+B'], ...TEAM_MAPPING['Cart. C+D+E']], []);
+  const n2Agents = useMemo(() => TEAM_MAPPING['N2'], []);
+
+  const n1Calls = useMemo(() => data.filter(d => n1Agents.some(ag => d.agentName.includes(ag))), [data, n1Agents]);
+  const n2Calls = useMemo(() => data.filter(d => n2Agents.some(ag => d.agentName.includes(ag))), [data, n2Agents]);
+
+  const resN1 = useMemo(() => {
+    const answered = n1Calls.filter(d => d.status === 'Resolvido' || d.leftQueueReason === 'answered');
+    return n1Calls.length > 0 ? Math.round((answered.length / n1Calls.length) * 100) : 0;
+  }, [n1Calls]);
+
+  const escRate = useMemo(() => data.length > 0 ? Math.round((n2Calls.length / data.length) * 100) : 0, [data, n2Calls]);
+  const avgRespN2 = useMemo(() => n2Calls.length > 0 ? Math.round(n2Calls.reduce((acc, curr) => acc + curr.waitTime, 0) / n2Calls.length) : 0, [n2Calls]);
+
   const queueData = useMemo(() => {
     const counts = data.reduce((acc, call) => {
-      acc[call.queue] = (acc[call.queue] || 0) + 1;
+      const q = call.team || call.queue || 'Sem Origem';
+      acc[q] = (acc[q] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
@@ -2777,104 +3089,500 @@ function AnalysisOfTicketsView({ data }: { data: CallData[] }) {
 
   const statusData = useMemo(() => {
     const counts = data.reduce((acc, call) => {
-      const status = call.leftQueueReason === 'answered' ? 'Atendida' : 
-                     call.leftQueueReason === 'abandon' ? 'Perdida > 1m' : 
-                     call.leftQueueReason === 'pendente' ? 'Pendente' : 'Outro';
+      let status = '';
+      if (call.origin === 'Movidesk') {
+        status = call.status || 'Outro';
+      } else {
+        status = call.leftQueueReason === 'answered' ? 'Atendida' : 
+                 call.leftQueueReason === 'abandon' ? 'Perdida > 1m' : 
+                 call.leftQueueReason === 'pendente' ? 'Pendente' : 'Outro';
+      }
       acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [data]);
 
+  // New metrics for Column 1 & 2
+  const ticketsAnalisados = data.length;
+  const uniqueGroups = useMemo(() => {
+    const teams = new Set(data.map(d => d.team || d.queue).filter(Boolean));
+    return teams.size;
+  }, [data]);
+
+  const subjectsRanking = useMemo(() => {
+    const counts = data.reduce((acc, d) => {
+       const s = d.subject || 'Sem assunto';
+       acc[s] = (acc[s] || 0) + 1;
+       return acc;
+    }, {} as Record<string, number>);
+    return Object.entries(counts)
+      .map(([name, value]) => ({ 
+        name, 
+        value,
+        percentage: ticketsAnalisados > 0 ? Math.round((value / ticketsAnalisados) * 100) : 0
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [data, ticketsAnalisados]);
+
+  const topSubject = subjectsRanking[0]?.name || '-';
+  const topSubjectPerc = subjectsRanking[0]?.percentage ? `${subjectsRanking[0].percentage}%` : '0%';
+
+  const [isSubjectModalOpen, setIsSubjectModalOpen] = useState(false);
+  const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [isSubjectDetailModalOpen, setIsSubjectDetailModalOpen] = useState(false);
+
+  const handleQueueClick = (queue: string) => {
+    setSelectedQueue(queue);
+    setIsModalOpen(true);
+  };
+
+  const handleSubjectClick = (subject: string) => {
+    setSelectedSubject(subject);
+    setIsSubjectDetailModalOpen(true);
+  };
+
+  const filteredTickets = useMemo(() => {
+    if (!selectedQueue) return [];
+    return data.filter(d => (d.team || d.queue || 'Sem Origem') === selectedQueue);
+  }, [data, selectedQueue]);
+
+  const filteredSubjectTickets = useMemo(() => {
+    if (!selectedSubject) return [];
+    return data.filter(d => (d.subject || 'Sem assunto') === selectedSubject);
+  }, [data, selectedSubject]);
+
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
-              <ListTree className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Distribuição por Fila</h3>
-              <p className="text-[10px] font-bold text-slate-400 uppercase">Volume de chamados por setor</p>
-            </div>
-          </div>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={queueData.slice(0, 8)}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-                <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={40} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+      {/* 1st Row: 4 metrics - Tickets Analisados, Equipes Identificadas, Assunto Principal, Taxa de Resolução */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <MetricBox 
+          label="Tickets Analisados" 
+          value={ticketsAnalisados.toString()} 
+          icon={BarChart2} 
+          color="text-blue-600"
+          subtitle="Total processado"
+          trendValue="Volume Global"
+        />
+        <MetricBox 
+          label="Equipes Identificadas" 
+          value={uniqueGroups.toString()} 
+          icon={Users} 
+          color="text-purple-600"
+          subtitle="Equipes únicas"
+          trendValue="Classificação"
+        />
+        <div onClick={() => setIsSubjectModalOpen(true)} className="cursor-pointer">
+          <MetricBox 
+            label="Assunto Principal" 
+            value={topSubject} 
+            icon={Search} 
+            color="text-orange-600"
+            subtitle={`${topSubjectPerc} do volume total`}
+            trendValue="Ver Todos"
+          />
         </div>
+        <MetricBox 
+          label="Taxa de Resolução no N1" 
+          value={`${resN1}%`} 
+          icon={CheckCircle2} 
+          color="text-emerald-600"
+          subtitle="Primeiro contato"
+          trendValue="Eficiente"
+        />
+      </div>
 
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
-              <CheckCircle2 className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Status dos Chamados</h3>
-              <p className="text-[10px] font-bold text-slate-400 uppercase">Proporção de resolutividade</p>
-            </div>
-          </div>
-          <div className="flex-1 h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={statusData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {statusData.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={entry.name === 'Atendida' ? '#10b981' : entry.name === 'Perdida > 1m' ? '#EF4444' : '#3b82f6'} 
+      <SubjectsRankingModal 
+        isOpen={isSubjectModalOpen}
+        onClose={() => setIsSubjectModalOpen(false)}
+        subjects={subjectsRanking}
+        onSubjectClick={handleSubjectClick}
+      />
+
+      {/* Main Analysis Layout */}
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Top-Left: Distribuição por Fila */}
+          <div className="lg:col-span-3">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px]">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+                  <ListTree className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Distribuição por Fila</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Volume de chamados por setor</p>
+                </div>
+              </div>
+              <div className="flex-1 h-0 min-h-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={queueData.slice(0, 8)} onClick={(data) => data && data.activePayload && handleQueueClick(data.activeLabel)}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                    <Tooltip 
+                      cursor={{ fill: '#f8fafc' }}
+                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                     />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }} />
-              </PieChart>
-            </ResponsiveContainer>
+                    <Bar dataKey="value" fill="#6366f1" radius={[6, 6, 0, 0]} barSize={40} className="cursor-pointer hover:opacity-80 transition-opacity" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="text-[9px] text-center font-bold text-slate-400 uppercase mt-4">Dica: Clique nas barras para ver os detalhes da fila</p>
+            </div>
+          </div>
+
+          {/* Top-Right: Key Metrics */}
+          <div className="flex flex-col gap-6">
+            <MetricBox 
+              label="Volume de Escalonamento" 
+              value={`${escRate}%`} 
+              icon={TrendingUp} 
+              color="text-amber-600"
+              subtitle="N1 para N2"
+              trendValue="Sob controle"
+            />
+            <MetricBox 
+              label="Tempo de Resposta N2" 
+              value={formatToHMM(avgRespN2)} 
+              icon={Timer} 
+              color="text-indigo-600"
+              subtitle="Média de espera"
+              trendValue="Estável"
+            />
           </div>
         </div>
+
+        {/* Bottom: Ranking de Recorrência */}
+        <RankingDeRecorrencia data={data} ticketsAnalisados={ticketsAnalisados} onViewDetail={handleQueueClick} />
       </div>
 
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-             <div className="p-2 bg-amber-50 text-amber-600 rounded-lg">
-                <Clock className="h-5 w-5" />
-             </div>
-             <div>
-                <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Evolução Temporal</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Acompanhamento de volumetria</p>
-             </div>
-          </div>
-        </div>
-        <div className="h-80">
-           <ChartCallsOverTime data={data} />
-        </div>
-      </div>
+
+      {/* Modal de Detalhes dos Tickets (Queues) */}
+      <TicketDetailsModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        queueName={selectedQueue || ''} 
+        tickets={filteredTickets} 
+      />
+
+      {/* Modal de Detalhes dos Tickets (Subject) */}
+      <TicketDetailsModal 
+        isOpen={isSubjectDetailModalOpen} 
+        onClose={() => setIsSubjectDetailModalOpen(false)} 
+        queueName={selectedSubject || ''} 
+        tickets={filteredSubjectTickets} 
+      />
+
+
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-4 bg-slate-50 border-b border-slate-200">
-           <h3 className="text-xs font-black text-slate-700 uppercase tracking-widest">Base de Dados Completa</h3>
-        </div>
         <DataTable data={data} />
       </div>
     </div>
   );
 }
+
+function RankingDeRecorrencia({ data, ticketsAnalisados, onViewDetail }: { data: CallData[], ticketsAnalisados: number, onViewDetail: (queue: string) => void }) {
+  const ranking = useMemo(() => {
+    // 1. Group data by Team/Queue
+    const teamGroups = data.reduce((acc, call) => {
+      const q = call.team || call.queue || 'Sem Origem';
+      if (!acc[q]) acc[q] = [];
+      acc[q].push(call);
+      return acc;
+    }, {} as Record<string, CallData[]>);
+
+    // 2. For each team, count tickets that have a recurrent subject (subject appears > 1 time)
+    return Object.entries(teamGroups).map(([name, teamTickets]) => {
+      const subjectCounts = teamTickets.reduce((acc, call) => {
+        const s = call.subject || 'Sem assunto';
+        acc[s] = (acc[s] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      const recurrentTicketsCount = Object.values(subjectCounts).reduce((sum, count) => {
+        return sum + (count > 1 ? count : 0);
+      }, 0);
+
+      const percentage = ticketsAnalisados > 0 ? Math.round((recurrentTicketsCount / ticketsAnalisados) * 100) : 0;
+      
+      return { 
+        name, 
+        value: recurrentTicketsCount, 
+        percentage 
+      };
+    })
+    .filter(item => item.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10);
+  }, [data, ticketsAnalisados]);
+
+  return (
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[400px]">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">RANKING DE RECORRÊNCIA</h3>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">DISTRIBUIÇÃO DE VOLUME POR CATEGORIA</p>
+        </div>
+        <button 
+          onClick={() => onViewDetail(ranking[0]?.name || '')}
+          className="flex items-center gap-2 px-6 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-widest hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all group"
+        >
+          <TrendingUp className="h-3 w-3 group-hover:scale-110 transition-transform" />
+          VER TICKETS
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto pr-2 space-y-8 scrollbar-thin scrollbar-thumb-slate-200">
+        {ranking.map((item, idx) => (
+          <div key={idx} className="group cursor-pointer" onClick={() => onViewDetail(item.name)}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-black text-slate-700 tracking-tight">{item.name}</span>
+                <span className="px-2 py-0.5 bg-slate-50 border border-slate-100 text-[8px] font-black text-slate-400 uppercase tracking-widest rounded-md">Automático</span>
+              </div>
+              <div className="flex items-center gap-8">
+                <div className="flex flex-col items-end">
+                   <span className="text-sm font-black text-slate-800 leading-none">{item.value}</span>
+                   <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">Tickets</span>
+                </div>
+                <span className="text-sm font-black text-indigo-600 min-w-[40px] text-right">{item.percentage}%</span>
+                <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-indigo-400 transition-colors" />
+              </div>
+            </div>
+            <div className="w-full h-2 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
+              <motion.div 
+                initial={{ width: 0 }}
+                animate={{ width: `${item.percentage}%` }}
+                transition={{ duration: 1, ease: 'easeOut', delay: idx * 0.1 }}
+                className="h-full bg-indigo-500 rounded-full"
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SubjectsRankingModal({ isOpen, onClose, subjects, onSubjectClick }: { isOpen: boolean, onClose: () => void, subjects: { name: string, value: number, percentage: number }[], onSubjectClick: (subject: string) => void }) {
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+          />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col"
+          >
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-orange-600 rounded-2xl shadow-lg shadow-orange-100">
+                  <Search className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-slate-900 tracking-tight">Ranking de Assuntos</h2>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Distribuição total por assunto do ticket</p>
+                </div>
+              </div>
+              <button onClick={onClose} className="p-2 hover:bg-slate-50 rounded-xl transition-all">
+                <X className="h-6 w-6 text-slate-400" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-6 space-y-4">
+              {subjects.map((item, idx) => (
+                <div 
+                  key={idx} 
+                  className="space-y-2 p-3 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all cursor-pointer group"
+                  onClick={() => onSubjectClick(item.name)}
+                >
+                  <div className="flex justify-between items-center text-xs font-bold text-slate-600">
+                    <span className="truncate pr-4 group-hover:text-orange-600 transition-colors">{item.name}</span>
+                    <span className="shrink-0">{item.value} tickets ({item.percentage}%)</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${item.percentage}%` }}
+                      className="h-full bg-orange-500 rounded-full"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex justify-end">
+              <button 
+                onClick={onClose}
+                className="px-8 py-3 bg-slate-800 text-white rounded-xl text-[11px] font-black uppercase tracking-[0.2em] hover:bg-slate-900 transition-all shadow-xl shadow-slate-200"
+              >
+                Fechar
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function TicketDetailsModal({ isOpen, onClose, queueName, tickets }: { isOpen: boolean, onClose: () => void, queueName: string, tickets: CallData[] }) {
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+          />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="relative bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col"
+          >
+            {/* Header */}
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-100">
+                  <ListTree className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-slate-900 tracking-tight">{queueName}</h2>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Listagem de {tickets.length} tickets identificados</p>
+                </div>
+              </div>
+              <button onClick={onClose} className="p-2 hover:bg-slate-50 rounded-xl transition-all">
+                <X className="h-6 w-6 text-slate-400" />
+              </button>
+            </div>
+
+            {/* Content Tabels */}
+            <div className="flex-1 overflow-auto p-6">
+              <div className="mb-6 flex gap-4">
+                 <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Normal</span>
+                 </div>
+                 <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-amber-500" />
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Atenção</span>
+                 </div>
+                 <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-rose-500" />
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Estourado</span>
+                 </div>
+                 <div className="ml-auto">
+                    <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Mostrando {Math.min(50, tickets.length)} de {tickets.length} registros</span>
+                 </div>
+              </div>
+
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-4">
+                    <th className="pb-4 px-2">Ticket</th>
+                    <th className="pb-4 px-2">Status</th>
+                    <th className="pb-4 px-2">Cliente</th>
+                    <th className="pb-4 px-2">Assunto</th>
+                    <th className="pb-4 px-2">Responsável</th>
+                    <th className="pb-4 px-2">Entrada/Saída</th>
+                    <th className="pb-4 px-2">Tempo de SLA</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {tickets.slice(0, 50).map((t, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50 transition-colors group">
+                      <td className="py-4 px-2">
+                        <div className="flex items-center gap-2">
+                          {t.ticketNumber ? (
+                            <>
+                              <a 
+                                href={`https://atendimento.movidesk.com/Ticket/Details/${t.ticketNumber}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[11px] font-black text-blue-600 hover:text-blue-800 transition-colors hover:underline"
+                              >
+                                #{t.ticketNumber}
+                              </a>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigator.clipboard.writeText(t.ticketNumber || '');
+                                  // No local state for feedback here yet, but link is the primary goal
+                                }}
+                                className="p-1 hover:bg-slate-100 rounded transition-colors text-slate-300 hover:text-blue-600"
+                                title="Copiar Ticket"
+                              >
+                                <Copy className="h-3 w-3" />
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-[11px] font-black text-slate-700">#{(t.callerNumber ? t.callerNumber.substring(t.callerNumber.length - 6) : idx + 1000)}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-4 px-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg uppercase tracking-tight">{t.status || 'Resolvido'}</span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-2 text-[11px] font-bold text-slate-600">
+                        {t.clientName || '—'}
+                      </td>
+                      <td className="py-4 px-2 text-[11px] font-bold text-slate-400 italic">
+                        {t.subject || 'Sem assunto'}
+                      </td>
+                      <td className="py-4 px-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center">
+                            <Users className="h-3 w-3 text-slate-400" />
+                          </div>
+                          <span className="text-[11px] font-black text-slate-700">{t.agentName}</span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-2 text-[10px] font-bold text-slate-300 uppercase tracking-tighter italic">
+                         Processing...
+                      </td>
+                      <td className="py-4 px-2">
+                        <div className="flex items-center justify-between gap-4">
+                           <span className="text-[11px] font-bold text-slate-300">—</span>
+                           <AlertCircle className="h-4 w-4 text-rose-500" />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filtros ativos aplicados na listagem</p>
+              </div>
+              <button 
+                onClick={onClose}
+                className="px-8 py-3 bg-slate-800 text-white rounded-xl text-[11px] font-black uppercase tracking-[0.2em] hover:bg-slate-900 transition-all shadow-xl shadow-slate-200"
+              >
+                Fechar Visualização
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 
