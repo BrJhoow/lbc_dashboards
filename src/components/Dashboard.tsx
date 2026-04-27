@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { CallData } from '../lib/types';
@@ -15,6 +15,53 @@ import {
   ArrowUpDown, Search, Filter, Calendar as CalendarIcon, ChevronDown, ChevronUp, Check, X,
   CheckCircle2, Timer, TrendingUp, Thermometer, Maximize2, Copy, ChevronLeft, ChevronRight, BarChart2, ListTree, SlidersHorizontal, AlertCircle
 } from 'lucide-react';
+
+const getLevenshteinDistance = (a: string, b: string): number => {
+  const matrix = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) matrix[0][j] = j;
+
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return matrix[a.length][b.length];
+};
+
+const isSimilarSubject = (a: string, b: string, threshold = 0.25) => {
+  const nA = a.toLowerCase().trim();
+  const nB = b.toLowerCase().trim();
+  if (nA === nB) return true;
+  
+  const maxLen = Math.max(nA.length, nB.length);
+  if (nA.length > 5 && nB.length > 5) {
+    if (nA.includes(nB) || nB.includes(nA)) return true;
+  }
+
+  // Optimize similarity check by only doing Levenshtein if names are of similar length
+  const dist = Math.abs(nA.length - nB.length);
+  if (dist > maxLen * threshold) return false;
+
+  const distance = getLevenshteinDistance(nA, nB);
+  return (distance / maxLen) <= threshold;
+};
+
+// Add a hook for debouncing values
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
+}
 
 interface DashboardProps {
   data: CallData[];
@@ -54,6 +101,73 @@ const getTotalTalkTimeColor = (val: number) => {
   if (val >= 64801 && val <= 90000) return 'text-purple-600 font-bold'; // PURPLE (EXCESSIVO)
   if (val >= 90001) return 'text-red-600 font-bold'; // RED (CRITICAL)
   return 'text-slate-600';
+};
+
+const TableFilterDropdown = ({ 
+  options, 
+  selectedValues, 
+  onToggle, 
+  onClose 
+}: { 
+  options: string[], 
+  selectedValues: string[], 
+  onToggle: (val: string) => void, 
+  onClose: () => void 
+}) => {
+  const [search, setSearch] = useState('');
+  const filtered = options.filter(o => o.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div className="absolute top-full mt-2 left-0 w-64 bg-white border border-slate-200 shadow-xl rounded-2xl z-50 flex flex-col p-2 overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="p-2 border-b border-slate-100 mb-2">
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-full border border-slate-200 focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all">
+          <Search className="h-3.5 w-3.5 text-slate-400" />
+          <input 
+            type="text" 
+            placeholder="Buscar..." 
+            className="bg-transparent text-[11px] outline-none w-full"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="max-h-56 overflow-y-auto custom-scrollbar flex flex-col gap-0.5">
+        <button 
+          onClick={() => {
+            options.forEach(o => {
+              if (selectedValues.length === options.length) {
+                 if (selectedValues.includes(o)) onToggle(o);
+              } else {
+                 if (!selectedValues.includes(o)) onToggle(o);
+              }
+            });
+          }}
+          className="flex items-center justify-between px-3 py-2 hover:bg-slate-50 text-[11px] font-bold text-blue-600 transition-colors rounded-lg"
+        >
+          {selectedValues.length === options.length ? "Desmarcar Todos" : "Marcar Todos"}
+        </button>
+        {filtered.map(opt => (
+          <button 
+            key={opt}
+            onClick={() => onToggle(opt)}
+            className={`flex items-center justify-between px-3 py-2 hover:bg-slate-50 transition-all rounded-lg text-left ${selectedValues.includes(opt) ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-600'}`}
+          >
+            <span className="text-[11px] truncate flex-1">{opt}</span>
+            {selectedValues.includes(opt) && <Check className="h-3 w-3 shrink-0" />}
+          </button>
+        ))}
+        {filtered.length === 0 && <span className="p-4 text-[10px] text-slate-400 text-center uppercase font-black">Nenhum valor</span>}
+      </div>
+      <div className="p-2 border-t border-slate-100 mt-2 flex justify-end">
+        <button 
+          onClick={onClose}
+          className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all"
+        >
+          OK
+        </button>
+      </div>
+    </div>
+  );
 };
 
 interface MetricStep {
@@ -288,19 +402,115 @@ const formatToHMM = (seconds: number) => {
   return `${m}m${(seconds % 60).toString().padStart(2, '0')}s`;
 };
 
+const N1_AGENTS_LIST = [...TEAM_MAPPING['Cart. A+B'], ...TEAM_MAPPING['Cart. C+D+E']];
+const N2_AGENTS_LIST = TEAM_MAPPING['N2'];
+
+const AtendimentosView = memo(({ data: viewData, allUniqueValues, onSearchChange, searchTerm }: { data: CallData[], allUniqueValues: Record<string, string[]>, onSearchChange: (val: string) => void, searchTerm: string }) => {
+  const n1Calls = useMemo(() => viewData.filter(d => N1_AGENTS_LIST.some(ag => d.agentName.includes(ag))), [viewData]);
+  const n2Calls = useMemo(() => viewData.filter(d => N2_AGENTS_LIST.some(ag => d.agentName.includes(ag))), [viewData]);
+
+  const n1Answered = useMemo(() => n1Calls.filter(d => d.leftQueueReason === 'answered'), [n1Calls]);
+  const n1Total = n1Calls.length;
+  const resN1 = n1Total > 0 ? Math.round((n1Answered.length / n1Total) * 100) : 0;
+  const escRate = viewData.length > 0 ? Math.round((n2Calls.length / viewData.length) * 100) : 0;
+  const avgRespN2 = n2Calls.length > 0 ? Math.round(n2Calls.reduce((acc, curr) => acc + curr.waitTime, 0) / n2Calls.length) : 0;
+
+  return (
+    <>
+      <MetricsCards data={viewData} />
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 shrink-0">
+        <ChartCallsOverTime data={viewData} />
+        <ChartAgentPerformance data={viewData} />
+      </div>
+
+      <div className="shrink-0 flex flex-col gap-6">
+        <AgentPerformanceSummary data={viewData} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 shrink-0 mt-2">
+        <div className="lg:col-span-1 h-full">
+          <ProductivityCalendar data={viewData} />
+        </div>
+        
+        <div className="lg:col-span-1 flex flex-col gap-6">
+          <MetricBox 
+            label="Taxa de Resolução no N1" 
+            value={`${resN1}%`} 
+            icon={CheckCircle2} 
+            color="text-emerald-600"
+            subtitle="Primeiro contato"
+            trendValue="Eficiente"
+          />
+          <AdvancedRecurrenceIndex data={viewData} />
+        </div>
+
+        <div className="lg:col-span-1 flex flex-col gap-6">
+          <MetricBox 
+            label="Volume de Escalonamento" 
+            value={`${escRate}%`} 
+            icon={TrendingUp} 
+            color="text-amber-600"
+            subtitle="N1 para N2"
+            trendValue="Sob controle"
+          />
+          <MetricBox 
+            label="Tempo de Resposta N2" 
+            value={formatToHMM(avgRespN2)} 
+            icon={Timer} 
+            color="text-indigo-600"
+            subtitle="Média de espera"
+            trendValue="Estável"
+          />
+        </div>
+      </div>
+
+      <div className="shrink-0">
+        <RecurringAgentsCard 
+          data={viewData} 
+          onFilter={(num) => onSearchChange(searchTerm === num ? '' : num)} 
+          activeFilter={searchTerm}
+        />
+      </div>
+
+      <div className="shrink-0">
+        <LogsTable data={viewData} allUniqueValues={allUniqueValues} />
+      </div>
+    </>
+  );
+});
+
 export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardProps) {
   // Normalize data first to ensure exact same grouping everywhere between Chat and GoTo.
   const data = useMemo(() => {
-    return rawData.map(d => ({
-      ...d,
-      agentName: formatAgentName(d.agentName)
-    }));
+    return rawData.map(d => {
+      const agentName = formatAgentName(d.agentName);
+      const queue = (d.queue || '').toLowerCase();
+      const subject = (d.subject || 'Sem assunto').toLowerCase();
+      const clientName = (d.clientName || '').toLowerCase();
+      const ticketNumber = (d.ticketNumber || '').toLowerCase();
+      const callerNumber = (d.callerNumber || '');
+
+      return {
+        ...d,
+        agentName,
+        _status: d.origin === 'Movidesk' ? (d.status || 'Outro') : 
+                 (d.leftQueueReason === 'answered' ? 'Atendida' : 
+                  d.leftQueueReason === 'abandon' ? 'Perdida > 1m' : 
+                  d.leftQueueReason === 'pendente' ? 'Pendente' : 'Outro'),
+        _dateFormatted: isNaN(d.startTime.getTime()) ? '-' : format(d.startTime, 'dd/MM/yyyy'),
+        _searchable: `${callerNumber} ${queue} ${agentName.toLowerCase()} ${ticketNumber} ${subject} ${clientName}`,
+        _team: getTeamForCall({ ...d, agentName }),
+        _schedule: getCallSchedule(d.startTime, d.queue)
+      };
+    });
   }, [rawData]);
 
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useDebounce(searchTerm, 300);
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
-  const [selectedTeam, setSelectedTeam] = useState('Todos');
-  const [selectedSchedule, setSelectedSchedule] = useState('Todos');
+  const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
+  const [selectedSchedules, setSelectedSchedules] = useState<string[]>([]);
   const [originFilter, setOriginFilter] = useState<'All' | 'Chat' | 'GoTo' | 'Movidesk'>('All');
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   const [isTeamOpen, setIsTeamOpen] = useState(false);
@@ -313,6 +523,23 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const calendarRef = useRef<HTMLDivElement>(null);
+
+  // Pre-calculate unique values for column filters to avoid expensive re-computations in tables
+  const allColumnUniqueValues = useMemo(() => {
+    const cols: (keyof CallData)[] = ['ticketNumber', 'origin', 'startTime', 'waitTime', 'talkDuration', 'agentName', 'queue', 'status', 'leftQueueReason', 'clientName'];
+    const result: Record<string, string[]> = {};
+    
+    cols.forEach(col => {
+      const set = new Set<string>();
+      data.forEach(d => {
+        if (col === 'startTime') set.add(d._dateFormatted || '-');
+        else if (col === 'status' || col === 'leftQueueReason') set.add(d._status || '-');
+        else set.add(String(d[col] || '-'));
+      });
+      result[col as string] = Array.from(set).sort();
+    });
+    return result;
+  }, [data]);
 
   useEffect(() => {
     if (data.length > 0) {
@@ -355,20 +582,16 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
 
   // Derived filtered data
   const filteredData = useMemo(() => {
+    const searchLower = debouncedSearch.toLowerCase();
+    const isVerySpecific = debouncedSearch.length >= 8 && /^\d+$/.test(debouncedSearch);
+
     return data.filter(d => {
-      const isVerySpecific = searchTerm.length >= 8 && /^\d+$/.test(searchTerm);
-      
-      const matchSearch = d.callerNumber.includes(searchTerm) || 
-                          d.queue.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          d.agentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (d.ticketNumber && d.ticketNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                          (d.subject && d.subject.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                          (d.clientName && d.clientName.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchSearch = d._searchable.includes(searchLower);
       
       // If search is active, don't restrict by agent unless the search term is very short
       // This allows seeing all interactions of a specific client number.
       let matchAgent = selectedAgents.length === 0 || selectedAgents.includes(d.agentName);
-      if (searchTerm.length >= 4 && d.callerNumber.includes(searchTerm)) {
+      if (debouncedSearch.length >= 4 && d.callerNumber.includes(debouncedSearch)) {
         matchAgent = true;
       }
       
@@ -379,20 +602,20 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
       
       // Strict Team/Queue filtering (User Request)
       let matchTeamStrict = true;
-      if (selectedTeam !== 'Todos') {
-        const callTeam = getTeamForCall(d);
-        if (selectedTeam === 'N1') {
-          matchTeamStrict = (callTeam === 'Cart. A+B' || callTeam === 'Cart. C+D+E' || callTeam === 'N1');
-        } else {
-          matchTeamStrict = (callTeam === selectedTeam);
-        }
+      if (selectedTeams.length > 0) {
+        matchTeamStrict = selectedTeams.some(t => {
+          if (t === 'N1') {
+            return (d._team === 'Cart. A+B' || d._team === 'Cart. C+D+E' || d._team === 'N1');
+          }
+          return d._team === t;
+        });
       }
 
       const matchOrigin = originFilter === 'All' || d.origin === originFilter;
       
       let matchSchedule = true;
-      if (selectedSchedule !== 'Todos') {
-        matchSchedule = getCallSchedule(d.startTime, d.queue) === selectedSchedule;
+      if (selectedSchedules.length > 0) {
+        matchSchedule = selectedSchedules.includes(d._schedule);
       }
       
       let matchDate = true;
@@ -404,28 +627,49 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
 
       return matchSearch && matchAgent && matchTeamStrict && matchOrigin && matchDate && matchSchedule;
     });
-  }, [data, searchTerm, selectedAgents, selectedSchedule, originFilter, dateRange]);
+  }, [data, debouncedSearch, selectedAgents, selectedTeams, selectedSchedules, originFilter, dateRange]);
 
-  const handleTeamChange = (team: string) => {
-    setSelectedTeam(team);
+  const toggleTeam = (team: string) => {
     if (team === 'Todos') {
+      setSelectedTeams([]);
+      setSelectedAgents([]);
+      return;
+    }
+
+    const newTeams = selectedTeams.includes(team) 
+      ? selectedTeams.filter(t => t !== team)
+      : [...selectedTeams, team];
+    
+    setSelectedTeams(newTeams);
+
+    // Update agents based on union of teams
+    if (newTeams.length === 0) {
       setSelectedAgents([]);
     } else {
-      let members: string[] = [];
-      if (team === 'N1') {
-        members = [...TEAM_MAPPING['Cart. A+B'], ...TEAM_MAPPING['Cart. C+D+E']];
-      } else {
-        members = TEAM_MAPPING[team] || [];
-      }
+      let allMembers: string[] = [];
+      newTeams.forEach(t => {
+        if (t === 'N1') {
+          allMembers = [...allMembers, ...TEAM_MAPPING['Cart. A+B'], ...TEAM_MAPPING['Cart. C+D+E']];
+        } else {
+          allMembers = [...allMembers, ...(TEAM_MAPPING[t] || [])];
+        }
+      });
       
-      // Filter uniqueAgents to find any that match the team member names (by prefix or exact)
       const matchedFullNames = uniqueAgents.filter(ag => 
-        members.some(m => ag.toLowerCase().includes(m.toLowerCase()))
+        allMembers.some(m => ag.toLowerCase().includes(m.toLowerCase()))
       );
-      
       setSelectedAgents(matchedFullNames);
     }
-    setIsTeamOpen(false);
+  };
+
+  const toggleSchedule = (sch: string) => {
+    if (sch === 'Todos') {
+      setSelectedSchedules([]);
+      return;
+    }
+    setSelectedSchedules(prev => 
+      prev.includes(sch) ? prev.filter(s => s !== sch) : [...prev, sch]
+    );
   };
 
   const toggleAgent = (ag: string) => {
@@ -437,8 +681,8 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
   const handleClearFilters = () => {
     setSearchTerm('');
     setSelectedAgents([]);
-    setSelectedTeam('Todos');
-    setSelectedSchedule('Todos');
+    setSelectedTeams([]);
+    setSelectedSchedules([]);
     setOriginFilter('All');
     
     // Reset date range
@@ -455,84 +699,9 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
     }
   };
 
-    const n1Agents = [...TEAM_MAPPING['Cart. A+B'], ...TEAM_MAPPING['Cart. C+D+E']];
-    const n2Agents = TEAM_MAPPING['N2'];
-
-    const AtendimentosView = ({ data: viewData }: { data: CallData[] }) => {
-      const n1Calls = viewData.filter(d => n1Agents.some(ag => d.agentName.includes(ag)));
-      const n2Calls = viewData.filter(d => n2Agents.some(ag => d.agentName.includes(ag)));
-
-      const n1Answered = n1Calls.filter(d => d.leftQueueReason === 'answered');
-      const n1Total = n1Calls.length;
-      const resN1 = n1Total > 0 ? Math.round((n1Answered.length / n1Total) * 100) : 0;
-      const escRate = viewData.length > 0 ? Math.round((n2Calls.length / viewData.length) * 100) : 0;
-      const avgRespN2 = n2Calls.length > 0 ? Math.round(n2Calls.reduce((acc, curr) => acc + curr.waitTime, 0) / n2Calls.length) : 0;
-
-      return (
-        <>
-          <MetricsCards data={viewData} />
-          
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 shrink-0">
-            <ChartCallsOverTime data={viewData} />
-            <ChartAgentPerformance data={viewData} />
-          </div>
-
-          <div className="shrink-0 flex flex-col gap-6">
-            <AgentPerformanceSummary data={viewData} />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 shrink-0 mt-2">
-            <div className="lg:col-span-1 h-full">
-              <ProductivityCalendar data={viewData} />
-            </div>
-            
-            <div className="lg:col-span-1 flex flex-col gap-6">
-              <MetricBox 
-                label="Taxa de Resolução no N1" 
-                value={`${resN1}%`} 
-                icon={CheckCircle2} 
-                color="text-emerald-600"
-                subtitle="Primeiro contato"
-                trend="up"
-                trendValue="Eficiente"
-              />
-              <AdvancedRecurrenceIndex data={viewData} />
-            </div>
-
-            <div className="lg:col-span-1 flex flex-col gap-6">
-              <MetricBox 
-                label="Volume de Escalonamento" 
-                value={`${escRate}%`} 
-                icon={TrendingUp} 
-                color="text-amber-600"
-                subtitle="N1 para N2"
-                trend="down"
-                trendValue="Sob controle"
-              />
-              <MetricBox 
-                label="Tempo de Resposta N2" 
-                value={formatToHMM(avgRespN2)} 
-                icon={Timer} 
-                color="text-indigo-600"
-                subtitle="Média de espera"
-                trend="neutral"
-                trendValue="Estável"
-              />
-            </div>
-          </div>
-
-          <div className="shrink-0">
-            <RecurringAgentsCard 
-              data={viewData} 
-              onFilter={(num) => setSearchTerm(prev => prev === num ? '' : num)} 
-              activeFilter={searchTerm}
-            />
-          </div>
-
-          <LogsTable data={viewData} />
-        </>
-      );
-    };
+  // Derived datasets for sub-views
+  const atendimentosData = useMemo(() => filteredData.filter(d => d.origin !== 'Movidesk'), [filteredData]);
+  const movideskData = useMemo(() => filteredData.filter(d => d.origin === 'Movidesk'), [filteredData]);
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 lg:p-8 font-sans transition-all duration-500">
@@ -569,7 +738,7 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
               <div className="flex items-center gap-2 overflow-hidden">
                 <Clock className="h-4 w-4 text-slate-400 shrink-0" />
                 <span className="text-[12px] font-medium truncate">
-                  {selectedSchedule === 'Todos' ? "Todos..." : selectedSchedule}
+                  {selectedSchedules.length === 0 ? "Todos..." : selectedSchedules.length === 1 ? selectedSchedules[0] : `${selectedSchedules.length} sel.`}
                 </span>
               </div>
               <ChevronDown className="h-3 w-3 text-slate-400 shrink-0 ml-1" />
@@ -579,10 +748,16 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
                 {SERVICE_SCHEDULES.map(sch => (
                   <button 
                     key={sch} 
-                    onClick={() => { setSelectedSchedule(sch); setIsScheduleOpen(false); }}
-                    className={`text-left px-4 py-2 text-[12px] transition-colors hover:bg-slate-50 flex items-center ${selectedSchedule === sch ? 'bg-indigo-50/50 text-[#2563eb] font-semibold' : 'text-slate-600'}`}
+                    onClick={() => toggleSchedule(sch)}
+                    className={`text-left px-4 py-2 text-[12px] transition-colors hover:bg-slate-50 flex items-center ${
+                      (sch === 'Todos' && selectedSchedules.length === 0) || selectedSchedules.includes(sch) 
+                      ? 'bg-indigo-50/50 text-[#2563eb] font-semibold' 
+                      : 'text-slate-600'
+                    }`}
                   >
-                    <div className="w-5 shrink-0 flex items-center">{selectedSchedule === sch && <Check className="h-3.5 w-3.5" />}</div>
+                    <div className="w-5 shrink-0 flex items-center">
+                      {((sch === 'Todos' && selectedSchedules.length === 0) || selectedSchedules.includes(sch)) && <Check className="h-3.5 w-3.5" />}
+                    </div>
                     {sch === 'Todos' ? "Todos os horários..." : sch}
                   </button>
                 ))}
@@ -600,7 +775,7 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
               <div className="flex items-center gap-2 overflow-hidden">
                 <Users className="h-4 w-4 text-slate-400 shrink-0" />
                 <span className="text-[12px] font-medium truncate">
-                  {selectedTeam === 'Todos' ? "Todas..." : selectedTeam}
+                  {selectedTeams.length === 0 ? "Todas..." : selectedTeams.length === 1 ? selectedTeams[0] : `${selectedTeams.length} sel.`}
                 </span>
               </div>
               <ChevronDown className="h-3 w-3 text-slate-400 shrink-0 ml-1" />
@@ -610,10 +785,16 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
                 {ALL_TEAMS.map(team => (
                   <button 
                     key={team} 
-                    onClick={() => { handleTeamChange(team); setIsTeamOpen(false); }}
-                    className={`text-left px-4 py-2 text-[12px] transition-colors hover:bg-slate-50 flex items-center ${selectedTeam === team ? 'bg-indigo-50/50 text-[#2563eb] font-semibold' : 'text-slate-600'}`}
+                    onClick={() => toggleTeam(team)}
+                    className={`text-left px-4 py-2 text-[12px] transition-colors hover:bg-slate-50 flex items-center ${
+                      (team === 'Todos' && selectedTeams.length === 0) || selectedTeams.includes(team) 
+                      ? 'bg-indigo-50/50 text-[#2563eb] font-semibold' 
+                      : 'text-slate-600'
+                    }`}
                   >
-                    <div className="w-5 shrink-0 flex items-center">{selectedTeam === team && <Check className="h-3.5 w-3.5" />}</div>
+                    <div className="w-5 shrink-0 flex items-center">
+                      {((team === 'Todos' && selectedTeams.length === 0) || selectedTeams.includes(team)) && <Check className="h-3.5 w-3.5" />}
+                    </div>
                     {team === 'Todos' ? "Todas as equipes..." : team}
                   </button>
                 ))}
@@ -750,17 +931,22 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
 
       {view === 'atendimentos' ? (
         <>
-          <AtendimentosView data={filteredData.filter(d => d.origin !== 'Movidesk')} />
+          <AtendimentosView 
+            data={atendimentosData} 
+            allUniqueValues={allColumnUniqueValues} 
+            searchTerm={searchTerm} 
+            onSearchChange={setSearchTerm} 
+          />
         </>
       ) : (
-        <AnalysisOfTicketsView data={filteredData.filter(d => d.origin === 'Movidesk')} />
+        <AnalysisOfTicketsView data={movideskData} allUniqueValues={allColumnUniqueValues} />
       )}
     </div>
   </div>
 );
 }
 
-function MetricBox({ 
+const MetricBox = memo(({ 
   label, 
   value, 
   icon: Icon, 
@@ -777,7 +963,7 @@ function MetricBox({
   trend?: 'up' | 'down' | 'neutral',
   trendValue?: string,
   className?: string
-}) {
+}) => {
   const isVeryLong = value.length > 25;
   const isMediumLong = value.length > 12 && value.length <= 25;
   
@@ -849,7 +1035,7 @@ function MetricBox({
       </div>
     </div>
   );
-}
+});
 
 function MetricsCards({ data }: { data: CallData[] }) {
   const [activeMetric, setActiveMetric] = useState<'avg' | 'total'>('avg');
@@ -2543,12 +2729,19 @@ function AgentPerformanceSummary({ data }: { data: CallData[] }) {
   );
 }
 
-function LogsTable({ data }: { data: CallData[] }) {
+function LogsTable({ data, allUniqueValues }: { data: CallData[], allUniqueValues: Record<string, string[]> }) {
   const [sortCol, setSortCol] = useState<keyof CallData | null>('startTime');
   const [sortDesc, setSortDesc] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>({});
+  const [filterDropdownOpen, setFilterDropdownOpen] = useState<string | null>(null);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
 
   const handleSort = (col: keyof CallData) => {
+    setCurrentPage(1);
     if (sortCol === col) {
       setSortDesc(!sortDesc);
     } else {
@@ -2557,18 +2750,84 @@ function LogsTable({ data }: { data: CallData[] }) {
     }
   };
 
+  const toggleFilterValue = (col: string, value: string) => {
+    setCurrentPage(1);
+    setColumnFilters(prev => {
+      const current = prev[col] || [];
+      const next = current.includes(value) 
+        ? current.filter(v => v !== value) 
+        : [...current, value];
+      
+      const newFilters = { ...prev };
+      if (next.length === 0) {
+        delete newFilters[col];
+      } else {
+        newFilters[col] = next;
+      }
+      return newFilters;
+    });
+  };
+
+  const filteredData = useMemo(() => {
+    return data.filter(item => {
+      return Object.entries(columnFilters).every(([col, values]) => {
+        let stringVal = '';
+        if (col === 'startTime') {
+          stringVal = item._dateFormatted || '-';
+        } else if (col === 'status' || col === 'leftQueueReason') {
+          stringVal = item._status || '-';
+        } else {
+          const val = item[col as keyof CallData];
+          stringVal = String(val || '-');
+        }
+        return values.includes(stringVal);
+      });
+    });
+  }, [data, columnFilters]);
+
+  const sortedData = useMemo(() => {
+    const dataSource = filteredData;
+    if (!sortCol) return dataSource;
+    return [...dataSource].sort((a, b) => {
+      let valA = a[sortCol];
+      let valB = b[sortCol];
+      
+      if (valA instanceof Date && valB instanceof Date) {
+        return sortDesc ? valB.getTime() - valA.getTime() : valA.getTime() - valB.getTime();
+      }
+      
+      if (typeof valA === 'string' && typeof valB === 'string') {
+        const strA = String(valA || '');
+        const strB = String(valB || '');
+        return sortDesc ? strB.localeCompare(strA) : strA.localeCompare(strB);
+      }
+      
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return sortDesc ? valB - valA : valA - valB;
+      }
+      return 0;
+    });
+  }, [filteredData, sortCol, sortDesc]);
+
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return sortedData.slice(start, start + itemsPerPage);
+  }, [sortedData, currentPage]);
+
+  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
+
   const handleExport = () => {
     const headers = ["Ticket", "Origem", "Data", "Espera", "Hora Inicio", "Hora Fim", "Conversa", "Telefone", "Operador", "Fila", "Status"];
-    const csvData = data.map(call => {
+    const dataSource = sortedData;
+    const csvData = dataSource.map(call => {
       const startTime = new Date(call.startTime);
       const endTime = new Date(startTime.getTime() + (call.talkDuration * 1000));
-      const status = call.leftQueueReason === 'answered' ? 'Atendida' : 
-                     call.leftQueueReason === 'abandon' ? 'Perdida' : call.leftQueueReason || '-';
+      const status = call._status;
       
       return [
         call.ticketNumber || '-',
         call.origin,
-        format(startTime, 'dd/MM/yyyy'),
+        call._dateFormatted,
         formatSeconds(call.waitTime),
         format(startTime, 'HH:mm:ss'),
         format(endTime, 'HH:mm:ss'),
@@ -2592,40 +2851,48 @@ function LogsTable({ data }: { data: CallData[] }) {
     document.body.removeChild(link);
   };
 
-  const sortedData = useMemo(() => {
-    if (!sortCol) return data;
-    return [...data].sort((a, b) => {
-      let valA = a[sortCol];
-      let valB = b[sortCol];
-      
-      if (valA instanceof Date && valB instanceof Date) {
-        return sortDesc ? valB.getTime() - valA.getTime() : valA.getTime() - valB.getTime();
-      }
-      
-      if (typeof valA === 'string' && typeof valB === 'string') {
-        return sortDesc ? valB.localeCompare(valA) : valA.localeCompare(valB);
-      }
-      
-      if (typeof valA === 'number' && typeof valB === 'number') {
-        return sortDesc ? valB - valA : valA - valB;
-      }
-      return 0;
-    });
-  }, [data, sortCol, sortDesc]);
+  const Th = ({ label, colKey, extraClass = "" }: { label: string, colKey: keyof CallData, extraClass?: string }) => {
+    const uniqueValues = allUniqueValues[colKey as string] || [];
+    const activeFilters = columnFilters[colKey as string] || [];
+    const isFiltered = activeFilters.length > 0;
 
-  const Th = ({ label, colKey, extraClass = "" }: { label: string, colKey: keyof CallData, extraClass?: string }) => (
-    <th 
-      className={`p-4 cursor-pointer hover:text-indigo-600 transition-colors select-none whitespace-nowrap bg-slate-50/80 backdrop-blur-sm border-b border-slate-200 ${extraClass}`}
-      onClick={() => handleSort(colKey)}
-    >
-      <div className="flex items-center gap-1.5">
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</span>
-        {sortCol === colKey && (
-          sortDesc ? <ChevronDown className="h-3 w-3 text-indigo-500" /> : <ChevronUp className="h-3 w-3 text-indigo-500" />
-        )}
-      </div>
-    </th>
-  );
+    return (
+      <th 
+        className={`p-4 bg-slate-50/80 backdrop-blur-sm border-b border-slate-200 sticky top-0 z-20 ${extraClass}`}
+      >
+        <div className="flex items-center justify-between gap-1.5">
+          <div 
+            className="flex items-center gap-1.5 cursor-pointer hover:text-indigo-600 transition-colors select-none flex-1 truncate"
+            onClick={() => handleSort(colKey)}
+          >
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider truncate">{label}</span>
+            {sortCol === colKey && (
+              sortDesc ? <ChevronDown className="h-3 w-3 text-indigo-500 shrink-0" /> : <ChevronUp className="h-3 w-3 text-indigo-500 shrink-0" />
+            )}
+          </div>
+          <div className="relative shrink-0">
+             <button 
+               onClick={(e) => {
+                  e.stopPropagation();
+                  setFilterDropdownOpen(filterDropdownOpen === (colKey as string) ? null : (colKey as string));
+               }}
+               className={`p-1 rounded-md transition-all ${isFiltered ? 'bg-blue-100 text-blue-600' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'}`}
+             >
+               <Filter className="h-3 w-3" />
+             </button>
+             {filterDropdownOpen === colKey && (
+               <TableFilterDropdown 
+                 options={uniqueValues}
+                 selectedValues={activeFilters}
+                 onToggle={(val) => toggleFilterValue(colKey as string, val)}
+                 onClose={() => setFilterDropdownOpen(null)}
+               />
+             )}
+          </div>
+        </div>
+      </th>
+    );
+  };
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 flex-1 flex flex-col overflow-hidden shadow-sm h-[600px] mt-6">
@@ -2673,11 +2940,10 @@ function LogsTable({ data }: { data: CallData[] }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-[11px]">
-            {sortedData.map((call, idx) => {
-              const status = call.leftQueueReason === 'answered' ? 'Atendida' : 
-                             call.leftQueueReason === 'abandon' ? 'Perdida' : call.leftQueueReason || '-';
+            {paginatedData.map((call, idx) => {
+              const status = call._status || '-';
               
-              const statusColors = call.leftQueueReason === 'answered' 
+              const statusColors = status === 'Atendida' || status === 'Resolvido'
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                 : 'bg-rose-50 text-rose-700 border-rose-200';
               
@@ -2730,7 +2996,7 @@ function LogsTable({ data }: { data: CallData[] }) {
                     </span>
                   </td>
                   <td className="p-4 whitespace-nowrap font-medium text-slate-600">
-                    {format(startTime, 'dd/MM/yyyy')}
+                    {call._dateFormatted}
                   </td>
                   <td className="p-4 font-mono text-slate-500">
                     {formatSeconds(call.waitTime)}
@@ -2748,7 +3014,7 @@ function LogsTable({ data }: { data: CallData[] }) {
                     {formatPhone(call.callerNumber)}
                   </td>
                   <td className="p-4 font-semibold text-slate-700">
-                    {formatAgentName(call.agentName)}
+                    {call.agentName}
                   </td>
                   <td className="p-4 text-slate-600 max-w-[150px] truncate" title={call.queue}>
                     {call.queue}
@@ -2769,16 +3035,72 @@ function LogsTable({ data }: { data: CallData[] }) {
           </div>
         )}
       </div>
+
+      {/* Pagination UI */}
+      {totalPages > 1 && (
+        <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
+          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            Página {currentPage} de {totalPages} ({sortedData.length} resultados)
+          </div>
+          <div className="flex items-center gap-1">
+            <button 
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              className="p-2 hover:bg-white rounded-lg border border-slate-200 disabled:opacity-30 transition-all text-slate-600"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <div className="flex items-center gap-1">
+              {[...Array(Math.min(5, totalPages))].map((_, i) => {
+                let pageNum = currentPage;
+                if (currentPage <= 3) pageNum = i + 1;
+                else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                else pageNum = currentPage - 2 + i;
+                
+                if (pageNum <= 0 || pageNum > totalPages) return null;
+
+                return (
+                  <button 
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`h-8 w-8 flex items-center justify-center rounded-lg text-[11px] font-bold transition-all border ${
+                      currentPage === pageNum 
+                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20' 
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+            <button 
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              className="p-2 hover:bg-white rounded-lg border border-slate-200 disabled:opacity-30 transition-all text-slate-600"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function DataTable({ data }: { data: CallData[] }) {
+function DataTable({ data, allUniqueValues }: { data: CallData[], allUniqueValues: Record<string, string[]> }) {
   const [sortCol, setSortCol] = useState<keyof CallData | null>('startTime');
   const [sortDesc, setSortDesc] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>({});
+  const [filterDropdownOpen, setFilterDropdownOpen] = useState<string | null>(null);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
 
   const handleSort = (col: keyof CallData) => {
+    setCurrentPage(1);
     if (sortCol === col) {
       setSortDesc(!sortDesc);
     } else {
@@ -2787,9 +3109,45 @@ function DataTable({ data }: { data: CallData[] }) {
     }
   };
 
+  const toggleFilterValue = (col: string, value: string) => {
+    setCurrentPage(1);
+    setColumnFilters(prev => {
+      const current = prev[col] || [];
+      const next = current.includes(value) 
+        ? current.filter(v => v !== value) 
+        : [...current, value];
+      
+      const newFilters = { ...prev };
+      if (next.length === 0) {
+        delete newFilters[col];
+      } else {
+        newFilters[col] = next;
+      }
+      return newFilters;
+    });
+  };
+
+  const filteredData = useMemo(() => {
+    return data.filter(item => {
+      return Object.entries(columnFilters).every(([col, values]) => {
+        let stringVal = '';
+        if (col === 'startTime') {
+          stringVal = item._dateFormatted || '-';
+        } else if (col === 'status' || col === 'leftQueueReason') {
+          stringVal = item._status || '-';
+        } else {
+          const val = item[col as keyof CallData];
+          stringVal = String(val || '-');
+        }
+        return values.includes(stringVal);
+      });
+    });
+  }, [data, columnFilters]);
+
   const sortedData = useMemo(() => {
-    if (!sortCol) return data;
-    return [...data].sort((a, b) => {
+    const dataSource = filteredData;
+    if (!sortCol) return dataSource;
+    return [...dataSource].sort((a, b) => {
       let valA = a[sortCol];
       let valB = b[sortCol];
       
@@ -2798,7 +3156,9 @@ function DataTable({ data }: { data: CallData[] }) {
       }
       
       if (typeof valA === 'string' && typeof valB === 'string') {
-        return sortDesc ? valB.localeCompare(valA) : valA.localeCompare(valB);
+        const strA = String(valA || '');
+        const strB = String(valB || '');
+        return sortDesc ? strB.localeCompare(strA) : strA.localeCompare(strB);
       }
       
       if (typeof valA === 'number' && typeof valB === 'number') {
@@ -2806,11 +3166,18 @@ function DataTable({ data }: { data: CallData[] }) {
       }
       return 0;
     });
-  }, [data, sortCol, sortDesc]);
+  }, [filteredData, sortCol, sortDesc]);
+
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return sortedData.slice(start, start + itemsPerPage);
+  }, [sortedData, currentPage]);
+
+  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
 
   const exportCSV = () => {
     const head = [
-      'N Ticket', 'Origem', 'Aberto em', 'Movimentado em', 'Resolvido em', 
+      'Ticket', 'Origem', 'Aberto em', 'Movimentado em', 'Resolvido em', 
       'Responsável: Equipe', 'Criado por', 'Responsável', 'Status', 'Assunto', 
       'Descrição do Ticket', 'Urgência', 'Tags', 'Cliente (Completo)', 
       'Cliente: CPF / CNPJ (Pessoa)', 'Serviço (Completo)', 'Tipo', 
@@ -2854,19 +3221,48 @@ function DataTable({ data }: { data: CallData[] }) {
     document.body.removeChild(link);
   };
 
-  const Th = ({ label, colKey, align = "left", extraClass = "" }: { label: string, colKey: keyof CallData, align?: "left" | "center" | "right", extraClass?: string }) => (
-    <th 
-      className={`p-4 cursor-pointer hover:text-indigo-600 transition-colors select-none whitespace-nowrap text-${align} bg-slate-50/80 backdrop-blur-sm border-b border-slate-200 ${extraClass}`}
-      onClick={() => handleSort(colKey)}
-    >
-      <div className="flex items-center gap-1.5">
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</span>
-        {sortCol === colKey && (
-          sortDesc ? <ChevronDown className="h-3 w-3 text-indigo-500" /> : <ChevronUp className="h-3 w-3 text-indigo-500" />
-        )}
-      </div>
-    </th>
-  );
+  const Th = ({ label, colKey, align = "left", extraClass = "" }: { label: string, colKey: keyof CallData, align?: "left" | "center" | "right", extraClass?: string }) => {
+    const uniqueValues = allUniqueValues[colKey as string] || [];
+    const activeFilters = columnFilters[colKey as string] || [];
+    const isFiltered = activeFilters.length > 0;
+
+    return (
+      <th 
+        className={`p-4 bg-slate-50/80 backdrop-blur-sm border-b border-slate-200 sticky top-0 z-20 ${extraClass}`}
+      >
+        <div className="flex items-center justify-between gap-1.5">
+          <div 
+            className={`flex items-center gap-1.5 cursor-pointer hover:text-indigo-600 transition-colors select-none flex-1 truncate text-${align}`}
+            onClick={() => handleSort(colKey)}
+          >
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider truncate">{label}</span>
+            {sortCol === colKey && (
+              sortDesc ? <ChevronDown className="h-3 w-3 text-indigo-500 shrink-0" /> : <ChevronUp className="h-3 w-3 text-indigo-500 shrink-0" />
+            )}
+          </div>
+          <div className="relative shrink-0">
+             <button 
+               onClick={(e) => {
+                  e.stopPropagation();
+                  setFilterDropdownOpen(filterDropdownOpen === (colKey as string) ? null : (colKey as string));
+               }}
+               className={`p-1 rounded-md transition-all ${isFiltered ? 'bg-blue-100 text-blue-600' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'}`}
+             >
+               <Filter className="h-3 w-3" />
+             </button>
+             {filterDropdownOpen === colKey && (
+               <TableFilterDropdown 
+                 options={uniqueValues}
+                 selectedValues={activeFilters}
+                 onToggle={(val) => toggleFilterValue(colKey as string, val)}
+                 onClose={() => setFilterDropdownOpen(null)}
+               />
+             )}
+          </div>
+        </div>
+      </th>
+    );
+  };
 
   const getStatusBadge = (status: string | undefined) => {
     if (!status) return null;
@@ -2903,12 +3299,12 @@ function DataTable({ data }: { data: CallData[] }) {
 
   const getOriginBadge = (origin: string) => {
     const colors: Record<string, string> = {
-      'Movidesk': 'bg-indigo-50 text-indigo-700 border-indigo-100',
-      'Chat': 'bg-teal-50 text-teal-700 border-teal-100',
-      'GoTo': 'bg-orange-50 text-orange-700 border-orange-100'
+      'Movidesk': 'bg-blue-50 text-blue-700 border-blue-100',
+      'Chat': 'bg-blue-50 text-blue-700 border-blue-100',
+      'GoTo': 'bg-blue-50 text-blue-700 border-blue-100'
     };
     return (
-      <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border ${colors[origin] || 'bg-slate-50'}`}>
+      <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border ${colors[origin] || 'bg-blue-50 text-blue-700 border-blue-100'}`}>
         {origin}
       </span>
     );
@@ -2952,8 +3348,8 @@ function DataTable({ data }: { data: CallData[] }) {
         <table className="w-full text-left border-collapse">
           <thead className="sticky top-0 z-20">
             <tr>
-              <Th label="N Ticket" colKey="ticketNumber" extraClass="w-[100px] min-w-[100px] max-w-[100px]" />
               <Th label="Origem" colKey="origin" />
+              <Th label="Ticket" colKey="ticketNumber" extraClass="w-[100px] min-w-[100px] max-w-[100px]" />
               <Th label="Aberto em" colKey="startTime" />
               <Th label="Movimentado em" colKey="movedAt" />
               <Th label="Resolvido em" colKey="resolutionDate" />
@@ -2976,7 +3372,7 @@ function DataTable({ data }: { data: CallData[] }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-[11px]">
-            {sortedData.map((call, idx) => {
+            {paginatedData.map((call, idx) => {
               const handleCopyTicket = (ticket: string | undefined) => {
                 if (!ticket) return;
                 navigator.clipboard.writeText(ticket);
@@ -2986,6 +3382,7 @@ function DataTable({ data }: { data: CallData[] }) {
 
               return (
               <tr key={idx} className="group hover:bg-slate-50/80 transition-colors cursor-default">
+                <td className="p-4">{getOriginBadge(call.origin)}</td>
                 <td className="p-4 w-[100px] min-w-[100px] max-w-[100px]">
                   <div className="flex items-center gap-1.5">
                     {call.ticketNumber ? (
@@ -3016,7 +3413,6 @@ function DataTable({ data }: { data: CallData[] }) {
                     )}
                   </div>
                 </td>
-                <td className="p-4">{getOriginBadge(call.origin)}</td>
                 <td className="p-4 font-medium text-slate-600 whitespace-nowrap">
                   {formatCellDate(call.startTime)}
                 </td>
@@ -3056,11 +3452,60 @@ function DataTable({ data }: { data: CallData[] }) {
           </div>
         )}
       </div>
+
+      {/* Pagination UI */}
+      {totalPages > 1 && (
+        <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
+          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            Página {currentPage} de {totalPages} ({sortedData.length} resultados)
+          </div>
+          <div className="flex items-center gap-1">
+            <button 
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              className="p-2 hover:bg-white rounded-lg border border-slate-200 disabled:opacity-30 transition-all text-slate-600"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <div className="flex items-center gap-1">
+              {[...Array(Math.min(5, totalPages))].map((_, i) => {
+                let pageNum = currentPage;
+                if (currentPage <= 3) pageNum = i + 1;
+                else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                else pageNum = currentPage - 2 + i;
+                
+                if (pageNum <= 0 || pageNum > totalPages) return null;
+
+                return (
+                  <button 
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`h-8 w-8 flex items-center justify-center rounded-lg text-[11px] font-bold transition-all border ${
+                      currentPage === pageNum 
+                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20' 
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+            <button 
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              className="p-2 hover:bg-white rounded-lg border border-slate-200 disabled:opacity-30 transition-all text-slate-600"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function AnalysisOfTicketsView({ data }: { data: CallData[] }) {
+const AnalysisOfTicketsView = memo(({ data, allUniqueValues }: { data: CallData[], allUniqueValues: Record<string, string[]> }) => {
   const [selectedQueue, setSelectedQueue] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -3071,7 +3516,7 @@ function AnalysisOfTicketsView({ data }: { data: CallData[] }) {
   const n2Calls = useMemo(() => data.filter(d => n2Agents.some(ag => d.agentName.includes(ag))), [data, n2Agents]);
 
   const resN1 = useMemo(() => {
-    const answered = n1Calls.filter(d => d.status === 'Resolvido' || d.leftQueueReason === 'answered');
+    const answered = n1Calls.filter(d => d._status === 'Resolvido' || d._status === 'Atendida');
     return n1Calls.length > 0 ? Math.round((answered.length / n1Calls.length) * 100) : 0;
   }, [n1Calls]);
 
@@ -3080,7 +3525,7 @@ function AnalysisOfTicketsView({ data }: { data: CallData[] }) {
 
   const queueData = useMemo(() => {
     const counts = data.reduce((acc, call) => {
-      const q = call.team || call.queue || 'Sem Origem';
+      const q = call._team || 'Sem Origem';
       acc[q] = (acc[q] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
@@ -3089,14 +3534,7 @@ function AnalysisOfTicketsView({ data }: { data: CallData[] }) {
 
   const statusData = useMemo(() => {
     const counts = data.reduce((acc, call) => {
-      let status = '';
-      if (call.origin === 'Movidesk') {
-        status = call.status || 'Outro';
-      } else {
-        status = call.leftQueueReason === 'answered' ? 'Atendida' : 
-                 call.leftQueueReason === 'abandon' ? 'Perdida > 1m' : 
-                 call.leftQueueReason === 'pendente' ? 'Pendente' : 'Outro';
-      }
+      const status = call._status;
       acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
@@ -3106,30 +3544,73 @@ function AnalysisOfTicketsView({ data }: { data: CallData[] }) {
   // New metrics for Column 1 & 2
   const ticketsAnalisados = data.length;
   const uniqueGroups = useMemo(() => {
-    const teams = new Set(data.map(d => d.team || d.queue).filter(Boolean));
+    const teams = new Set(data.map(d => d._team).filter(Boolean));
     return teams.size;
   }, [data]);
 
   const subjectsRanking = useMemo(() => {
-    const counts = data.reduce((acc, d) => {
+    if (data.length === 0) return [];
+    
+    const rawCounts = data.reduce((acc, d) => {
        const s = d.subject || 'Sem assunto';
        acc[s] = (acc[s] || 0) + 1;
        return acc;
     }, {} as Record<string, number>);
-    return Object.entries(counts)
-      .map(([name, value]) => ({ 
-        name, 
-        value,
-        percentage: ticketsAnalisados > 0 ? Math.round((value / ticketsAnalisados) * 100) : 0
-      }))
-      .sort((a, b) => b.value - a.value);
+
+    const sortedRaw = Object.entries(rawCounts).sort((a, b) => b[1] - a[1]);
+    
+    const groups: { name: string, value: number, names: string[] }[] = [];
+    
+    // Process only top items for grouping to avoid performance death when many unique subjects exist
+    // Usually the long tail doesn't need complex grouping
+    const processItems = sortedRaw.slice(0, 300);
+    const remainingItems = sortedRaw.slice(300);
+
+    processItems.forEach(([name, value]) => {
+      let foundGroup = false;
+      const nameNorm = name.toLowerCase().replace(/[^\w\s]/gi, '').trim();
+      const nameLen = nameNorm.length;
+      
+      for (const group of groups) {
+         const groupNameNorm = group.name.toLowerCase().replace(/[^\w\s]/gi, '').trim();
+         const groupLen = groupNameNorm.length;
+         
+         // Fast normalization check
+         if (nameNorm === groupNameNorm || Math.abs(nameLen - groupLen) <= Math.max(nameLen, groupLen) * 0.2) {
+           if (isSimilarSubject(name, group.name)) {
+             group.value += value;
+             group.names.push(name);
+             foundGroup = true;
+             break;
+           }
+         }
+      }
+      if (!foundGroup) {
+        groups.push({ name, value, names: [name] });
+      }
+    });
+
+    // Add remaining items as their own groups without similarity checking
+    remainingItems.forEach(([name, value]) => {
+      groups.push({ name, value, names: [name] });
+    });
+
+    return groups.map(g => ({ 
+      name: g.names.length > 1 ? `${g.name} (${g.names.length} variações)` : g.name, 
+      primaryName: g.name,
+      value: g.value,
+      names: g.names,
+      percentage: ticketsAnalisados > 0 ? Math.round((g.value / ticketsAnalisados) * 100) : 0
+    }))
+    .sort((a, b) => b.value - a.value);
   }, [data, ticketsAnalisados]);
 
-  const topSubject = subjectsRanking[0]?.name || '-';
+  const topSubject = subjectsRanking[0]?.primaryName || '-';
   const topSubjectPerc = subjectsRanking[0]?.percentage ? `${subjectsRanking[0].percentage}%` : '0%';
 
   const [isSubjectModalOpen, setIsSubjectModalOpen] = useState(false);
-  const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [selectedSubjectNames, setSelectedSubjectNames] = useState<string[]>([]);
+  const [selectedSubjectTitle, setSelectedSubjectTitle] = useState<string>('');
   const [isSubjectDetailModalOpen, setIsSubjectDetailModalOpen] = useState(false);
 
   const handleQueueClick = (queue: string) => {
@@ -3137,20 +3618,24 @@ function AnalysisOfTicketsView({ data }: { data: CallData[] }) {
     setIsModalOpen(true);
   };
 
-  const handleSubjectClick = (subject: string) => {
-    setSelectedSubject(subject);
+  const handleSubjectClick = (names: string[], title: string) => {
+    setSelectedSubjectNames(names);
+    setSelectedSubjectTitle(title);
     setIsSubjectDetailModalOpen(true);
   };
 
   const filteredTickets = useMemo(() => {
     if (!selectedQueue) return [];
-    return data.filter(d => (d.team || d.queue || 'Sem Origem') === selectedQueue);
+    return data.filter(d => (d._team || 'Sem Origem') === selectedQueue);
   }, [data, selectedQueue]);
 
   const filteredSubjectTickets = useMemo(() => {
-    if (!selectedSubject) return [];
-    return data.filter(d => (d.subject || 'Sem assunto') === selectedSubject);
-  }, [data, selectedSubject]);
+    if (selectedSubjectNames.length === 0) return [];
+    return data.filter(d => {
+      const s = d.subject || 'Sem assunto';
+      return selectedSubjectNames.includes(s);
+    });
+  }, [data, selectedSubjectNames]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -3264,30 +3749,31 @@ function AnalysisOfTicketsView({ data }: { data: CallData[] }) {
         onClose={() => setIsModalOpen(false)} 
         queueName={selectedQueue || ''} 
         tickets={filteredTickets} 
+        allUniqueValues={allUniqueValues}
       />
 
       {/* Modal de Detalhes dos Tickets (Subject) */}
       <TicketDetailsModal 
         isOpen={isSubjectDetailModalOpen} 
         onClose={() => setIsSubjectDetailModalOpen(false)} 
-        queueName={selectedSubject || ''} 
+        queueName={selectedSubjectTitle} 
         tickets={filteredSubjectTickets} 
+        allUniqueValues={allUniqueValues}
       />
 
 
-
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <DataTable data={data} />
+        <DataTable data={data} allUniqueValues={allUniqueValues} />
       </div>
     </div>
   );
-}
+});
 
 function RankingDeRecorrencia({ data, ticketsAnalisados, onViewDetail }: { data: CallData[], ticketsAnalisados: number, onViewDetail: (queue: string) => void }) {
   const ranking = useMemo(() => {
-    // 1. Group data by Team/Queue
+    // 1. Group data by Team/Queue using pre-calculated _team
     const teamGroups = data.reduce((acc, call) => {
-      const q = call.team || call.queue || 'Sem Origem';
+      const q = call._team || 'Sem Origem';
       if (!acc[q]) acc[q] = [];
       acc[q].push(call);
       return acc;
@@ -3366,7 +3852,7 @@ function RankingDeRecorrencia({ data, ticketsAnalisados, onViewDetail }: { data:
   );
 }
 
-function SubjectsRankingModal({ isOpen, onClose, subjects, onSubjectClick }: { isOpen: boolean, onClose: () => void, subjects: { name: string, value: number, percentage: number }[], onSubjectClick: (subject: string) => void }) {
+function SubjectsRankingModal({ isOpen, onClose, subjects, onSubjectClick }: { isOpen: boolean, onClose: () => void, subjects: { name: string, primaryName: string, value: number, percentage: number, names: string[] }[], onSubjectClick: (names: string[], primaryName: string) => void }) {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -3391,7 +3877,7 @@ function SubjectsRankingModal({ isOpen, onClose, subjects, onSubjectClick }: { i
                 </div>
                 <div>
                   <h2 className="text-xl font-black text-slate-900 tracking-tight">Ranking de Assuntos</h2>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Distribuição total por assunto do ticket</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Distribuição total por assunto do ticket (Agrupados por semelhança)</p>
                 </div>
               </div>
               <button onClick={onClose} className="p-2 hover:bg-slate-50 rounded-xl transition-all">
@@ -3403,10 +3889,17 @@ function SubjectsRankingModal({ isOpen, onClose, subjects, onSubjectClick }: { i
                 <div 
                   key={idx} 
                   className="space-y-2 p-3 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all cursor-pointer group"
-                  onClick={() => onSubjectClick(item.name)}
+                  onClick={() => onSubjectClick(item.names, item.primaryName)}
                 >
                   <div className="flex justify-between items-center text-xs font-bold text-slate-600">
-                    <span className="truncate pr-4 group-hover:text-orange-600 transition-colors">{item.name}</span>
+                    <div className="flex flex-col truncate pr-4">
+                      <span className="truncate group-hover:text-orange-600 transition-colors uppercase">{item.name}</span>
+                      {item.names.length > 1 && (
+                        <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tighter mt-0.5 block truncate">
+                          Variações: {item.names.slice(1, 4).join(' | ')}{item.names.length > 4 ? '...' : ''}
+                        </span>
+                      )}
+                    </div>
                     <span className="shrink-0">{item.value} tickets ({item.percentage}%)</span>
                   </div>
                   <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
@@ -3434,7 +3927,7 @@ function SubjectsRankingModal({ isOpen, onClose, subjects, onSubjectClick }: { i
   );
 }
 
-function TicketDetailsModal({ isOpen, onClose, queueName, tickets }: { isOpen: boolean, onClose: () => void, queueName: string, tickets: CallData[] }) {
+function TicketDetailsModal({ isOpen, onClose, queueName, tickets, allUniqueValues }: { isOpen: boolean, onClose: () => void, queueName: string, tickets: CallData[], allUniqueValues: Record<string, string[]> }) {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -3468,114 +3961,21 @@ function TicketDetailsModal({ isOpen, onClose, queueName, tickets }: { isOpen: b
               </button>
             </div>
 
-            {/* Content Tabels */}
-            <div className="flex-1 overflow-auto p-6">
-              <div className="mb-6 flex gap-4">
-                 <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Normal</span>
-                 </div>
-                 <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-amber-500" />
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Atenção</span>
-                 </div>
-                 <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-rose-500" />
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Estourado</span>
-                 </div>
-                 <div className="ml-auto">
-                    <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Mostrando {Math.min(50, tickets.length)} de {tickets.length} registros</span>
-                 </div>
-              </div>
-
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-4">
-                    <th className="pb-4 px-2">Ticket</th>
-                    <th className="pb-4 px-2">Status</th>
-                    <th className="pb-4 px-2">Cliente</th>
-                    <th className="pb-4 px-2">Assunto</th>
-                    <th className="pb-4 px-2">Responsável</th>
-                    <th className="pb-4 px-2">Entrada/Saída</th>
-                    <th className="pb-4 px-2">Tempo de SLA</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {tickets.slice(0, 50).map((t, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50 transition-colors group">
-                      <td className="py-4 px-2">
-                        <div className="flex items-center gap-2">
-                          {t.ticketNumber ? (
-                            <>
-                              <a 
-                                href={`https://atendimento.movidesk.com/Ticket/Details/${t.ticketNumber}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[11px] font-black text-blue-600 hover:text-blue-800 transition-colors hover:underline"
-                              >
-                                #{t.ticketNumber}
-                              </a>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigator.clipboard.writeText(t.ticketNumber || '');
-                                  // No local state for feedback here yet, but link is the primary goal
-                                }}
-                                className="p-1 hover:bg-slate-100 rounded transition-colors text-slate-300 hover:text-blue-600"
-                                title="Copiar Ticket"
-                              >
-                                <Copy className="h-3 w-3" />
-                              </button>
-                            </>
-                          ) : (
-                            <span className="text-[11px] font-black text-slate-700">#{(t.callerNumber ? t.callerNumber.substring(t.callerNumber.length - 6) : idx + 1000)}</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-4 px-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg uppercase tracking-tight">{t.status || 'Resolvido'}</span>
-                        </div>
-                      </td>
-                      <td className="py-4 px-2 text-[11px] font-bold text-slate-600">
-                        {t.clientName || '—'}
-                      </td>
-                      <td className="py-4 px-2 text-[11px] font-bold text-slate-400 italic">
-                        {t.subject || 'Sem assunto'}
-                      </td>
-                      <td className="py-4 px-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center">
-                            <Users className="h-3 w-3 text-slate-400" />
-                          </div>
-                          <span className="text-[11px] font-black text-slate-700">{t.agentName}</span>
-                        </div>
-                      </td>
-                      <td className="py-4 px-2 text-[10px] font-bold text-slate-300 uppercase tracking-tighter italic">
-                         Processing...
-                      </td>
-                      <td className="py-4 px-2">
-                        <div className="flex items-center justify-between gap-4">
-                           <span className="text-[11px] font-bold text-slate-300">—</span>
-                           <AlertCircle className="h-4 w-4 text-rose-500" />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* Content Table using DataTable Component */}
+            <div className="flex-1 overflow-hidden flex flex-col">
+              <DataTable data={tickets} allUniqueValues={allUniqueValues} />
             </div>
 
             {/* Footer */}
-            <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between px-6">
               <div>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filtros ativos aplicados na listagem</p>
               </div>
               <button 
                 onClick={onClose}
-                className="px-8 py-3 bg-slate-800 text-white rounded-xl text-[11px] font-black uppercase tracking-[0.2em] hover:bg-slate-900 transition-all shadow-xl shadow-slate-200"
+                className="px-8 py-2 bg-slate-800 text-white rounded-xl text-[11px] font-black uppercase tracking-[0.2em] hover:bg-slate-900 transition-all shadow-xl shadow-slate-200"
               >
-                Fechar Visualização
+                Fechar
               </button>
             </div>
           </motion.div>

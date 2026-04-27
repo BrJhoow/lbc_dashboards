@@ -33,4 +33,11 @@ export interface CallData {
   slaN2FirstExit?: string | Date;
   firstResponseTime?: string;
   downtimeHours?: string;
+
+  // Internal optimization fields
+  _status?: string;
+  _dateFormatted?: string;
+  _searchable?: string;
+  _team?: string;
+  _schedule?: string;
 }
