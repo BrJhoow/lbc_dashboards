@@ -69,7 +69,7 @@ interface DashboardProps {
   view?: 'atendimentos' | 'chamados';
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#3b82f6', '#82ca9d'];
 
 function formatSeconds(totalSeconds: number) {
   if (isNaN(totalSeconds) || totalSeconds < 0) return '00:00';
@@ -88,7 +88,7 @@ const getSlaColor = (val: number) => {
   if (val >= 90 && val <= 300) return 'text-emerald-600 font-bold'; // GREEN (EFICIENTE)
   if (val >= 301 && val <= 600) return 'text-amber-500 font-bold'; // YELLOW (MODERADO)
   if (val >= 601 && val <= 1200) return 'text-orange-500 font-bold'; // ORANGE (PROLONGADO)
-  if (val >= 1201 && val <= 1800) return 'text-purple-600 font-bold'; // PURPLE (EXCESSIVO)
+  if (val >= 1201 && val <= 1800) return 'text-blue-600 font-bold'; // BLUE (EXCESSIVO)
   if (val >= 1801) return 'text-red-600 font-bold'; // RED (CRITICAL)
   return 'text-slate-600';
 };
@@ -99,7 +99,7 @@ const getTotalTalkTimeColor = (val: number) => {
   if (val >= 14401 && val <= 28800) return 'text-emerald-600 font-bold'; // GREEN (EFICIENTE)
   if (val >= 28801 && val <= 43200) return 'text-amber-500 font-bold'; // YELLOW (MODERADO)
   if (val >= 43201 && val <= 64800) return 'text-orange-500 font-bold'; // ORANGE (PROLONGADO)
-  if (val >= 64801 && val <= 90000) return 'text-purple-600 font-bold'; // PURPLE (EXCESSIVO)
+  if (val >= 64801 && val <= 90000) return 'text-blue-600 font-bold'; // BLUE (EXCESSIVO)
   if (val >= 90001) return 'text-red-600 font-bold'; // RED (CRITICAL)
   return 'text-slate-600';
 };
@@ -147,7 +147,7 @@ const TableFilterDropdown = ({
         >
           {selectedValues.length === options.length ? "Desmarcar Todos" : "Marcar Todos"}
         </button>
-        {filtered.map(opt => (
+        {filtered.slice(0, 100).map(opt => (
           <button 
             key={opt}
             onClick={() => onToggle(opt)}
@@ -157,6 +157,11 @@ const TableFilterDropdown = ({
             {selectedValues.includes(opt) && <Check className="h-3 w-3 shrink-0" />}
           </button>
         ))}
+        {filtered.length > 100 && (
+          <span className="p-3 text-[10px] text-slate-400 text-center font-bold">
+            + {filtered.length - 100} valores (use a busca)
+          </span>
+        )}
         {filtered.length === 0 && <span className="p-4 text-[10px] text-slate-400 text-center uppercase font-black">Nenhum valor</span>}
       </div>
       <div className="p-2 border-t border-slate-100 mt-2 flex justify-end">
@@ -183,7 +188,7 @@ const SLA_METRICS: MetricStep[] = [
   { label: 'EFICIENTE', range: '01:30 - 05:00', color: 'bg-emerald-500', desc: 'Tempo ideal' },
   { label: 'MODERADO', range: '05:01 - 10:00', color: 'bg-amber-500', desc: 'Esperado' },
   { label: 'PROLONGADO', range: '10:01 - 20:00', color: 'bg-orange-500', desc: 'Longo' },
-  { label: 'EXCESSIVO', range: '20:01 - 30:00', color: 'bg-purple-500', desc: 'Muito longo' },
+  { label: 'EXCESSIVO', range: '20:01 - 30:00', color: 'bg-blue-500', desc: 'Muito longo' },
   { label: 'CRÍTICO', range: '≥ 30:01', color: 'bg-red-600', desc: 'Crítico' },
 ];
 
@@ -192,7 +197,7 @@ const TOTAL_TALK_METRICS: MetricStep[] = [
   { label: 'EFICIENTE', range: '4 - 8h', color: 'bg-emerald-500' },
   { label: 'MODERADO', range: '8 - 12h', color: 'bg-amber-500' },
   { label: 'PROLONGADO', range: '12 - 18h', color: 'bg-orange-500' },
-  { label: 'EXCESSIVO', range: '18 - 25h', color: 'bg-purple-500' },
+  { label: 'EXCESSIVO', range: '18 - 25h', color: 'bg-blue-500' },
   { label: 'CRÍTICO', range: '≥ 25:01h', color: 'bg-red-600' },
 ];
 
@@ -293,9 +298,30 @@ function formatAgentName(fullName: string) {
   if (!fullName || fullName.trim() === '') return 'Ligações Perdidas';
   const lower = fullName.toLowerCase();
   
-  // Unification requested by user
+  // Custom Mappings and Groupings requested by user
+  if (lower.includes('a+b_brener schimit')) return 'Brener Schimit';
+  if (lower.includes('a+b_giane oliveira')) return 'Giane Gomes';
+  if (lower.includes('a+b_johnny morais') || lower.includes('johnny silva')) return 'Johnny Morais';
+  if (lower.includes('a+b_kerlaine lucindro')) return 'Kerlaine Lucindro';
+  if (lower.includes('a+b_rodrigo verissimo') || lower.includes('a+b_rodrigo veríssimo') || lower.includes('rodrigo siqueira')) return 'Rodrigo Verissimo';
+  if (lower.includes('a+b_vinicius costa')) return 'Vinicius Costa';
+  if (lower.includes('c+d_alan santos')) return 'Alan Alves';
+  if (lower.includes('c+d_andrezza amorim')) return 'Andrezza Amorim';
+  if (lower.includes('c+d_illana rosa')) return 'Illana Rosa';
+  if (lower.includes('c+d_johnny viriato')) return 'Johnny Viriato';
+  if (lower.includes('c+d_julia oliveira') || lower.includes('c+d_júlia oliveira')) return 'Julia Oliveira';
+  if (lower.includes('c+d_marcelo bezzera') || lower.includes('c+d_marcelo bezerra')) return 'Marcelo Bezerra';
+  if (lower.includes('c+d_maria luiza')) return 'Maria Luiza';
+  if (lower.includes('c+d_nilton moraes')) return 'Nilton Henrique';
+  if (lower.includes('c+d_rosile santos') || lower.includes('rosilene')) return 'Rosilene Santos';
+  if (lower.includes('c+d_thiago costa')) return 'Thiago Costa';
+  if (lower.includes('c+d_victor de')) return 'Victor Oliveira';
+  if (lower.includes('c+d_wallacesouza') || lower.includes('c+d_wallace souza') || lower === 'wallace') return 'Wallace Evangelista';
+
+  if (lower.includes('nathan rodrigues') || lower.includes('nathan cesar') || lower.includes('natan santana')) return 'Nathan Santana';
+
+  // Unification requested by user (previously existing)
   if (lower.includes('tamara marques') || lower.includes('tamara costa')) return 'Tamara Costa';
-  if (lower.includes('rosilene siqueira') || lower === 'rosilene') return 'Rosilene';
   if (lower.includes('henrique santos')) return 'Wallace Evangelista';
   if (lower.includes('erik silva')) return 'Maria Luiza';
 
@@ -313,9 +339,9 @@ function formatAgentName(fullName: string) {
 }
 
 const TEAM_MAPPING: Record<string, string[]> = {
-  'Cart. A+B': ['Rodrigo', 'Kerlaine', 'Giane', 'Tamara Costa', 'Vinicius', 'Johnny Silva', 'Brener'],
-  'Cart. C+D+E': ['Johnny Viriato', 'Julia', 'Andrezza', 'Maria Luiza', 'Thiago', 'Nilton', 'Illana', 'Marcelo Bezerra', 'Rosilene', 'Wallace Evangelista', 'Victor Oliveira'],
-  'N2': ['Gutemberg', 'Wesley Rodrigues', 'Paulo', 'Marcelo Freitas', 'Nathan']
+  'Cart. A+B': ['Rodrigo Verissimo', 'Kerlaine Lucindro', 'Giane Gomes', 'Tamara Costa', 'Vinicius Costa', 'Johnny Morais', 'Brener Schimit'],
+  'Cart. C+D+E': ['Johnny Viriato', 'Julia Oliveira', 'Andrezza Amorim', 'Maria Luiza', 'Thiago Costa', 'Nilton Henrique', 'Illana Rosa', 'Marcelo Bezerra', 'Rosilene Santos', 'Wallace Evangelista', 'Victor Oliveira', 'Alan Alves'],
+  'N2': ['Gutemberg', 'Wesley Rodrigues', 'Paulo', 'Marcelo Freitas', 'Nathan Santana']
 };
 
 // N1 = Cart. A+B + Cart. C+D+E
@@ -527,17 +553,30 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
 
   // Pre-calculate unique values for column filters to avoid expensive re-computations in tables
   const allColumnUniqueValues = useMemo(() => {
-    const cols: (keyof CallData)[] = ['ticketNumber', 'origin', 'startTime', 'waitTime', 'talkDuration', 'agentName', 'queue', 'status', 'leftQueueReason', 'clientName'];
+    if (!data || data.length === 0) return {};
+    const cols: (keyof CallData)[] = [
+      'ticketNumber', 'origin', 'startTime', 'waitTime', 'talkDuration', 'agentName', 'queue', 'status', 'leftQueueReason', 'clientName',
+      'movedAt', 'resolutionDate', 'team', 'createdBy', 'subject', 'description', 'urgency', 'tags', 'cnpj', 'service', 'type', 'slaN2FirstEntry', 'slaN2FirstExit', 'firstResponseTime', 'totalLifeTime'
+    ];
     const result: Record<string, string[]> = {};
     
     cols.forEach(col => {
       const set = new Set<string>();
       data.forEach(d => {
-        if (col === 'startTime') set.add(d._dateFormatted || '-');
-        else if (col === 'status' || col === 'leftQueueReason') set.add(d._status || '-');
-        else set.add(String(d[col] || '-'));
+        if (col === 'startTime') {
+          set.add(d._dateFormatted || '-');
+        } else if (col === 'status' || col === 'leftQueueReason') {
+          set.add(d._status || '-');
+        } else if (col === 'movedAt' || col === 'resolutionDate' || col === 'slaN2FirstEntry' || col === 'slaN2FirstExit') {
+          const val = d[col as keyof CallData];
+          set.add(val instanceof Date ? format(val, 'dd/MM/yyyy HH:mm') : String(val || '-'));
+        } else {
+          set.add(String(d[col] || '-'));
+        }
       });
-      result[col as string] = Array.from(set).sort();
+      const arr = Array.from(set);
+      if (arr.length < 1000) arr.sort();
+      result[col as string] = arr;
     });
     return result;
   }, [data]);
@@ -1113,14 +1152,14 @@ function MetricsCards({ data }: { data: CallData[] }) {
       if (val >= 90 && val <= 300) return { label: 'EFICIENTE', color: '#10B981', tailwind: 'text-emerald-600 bg-emerald-50 border-emerald-100' };
       if (val >= 301 && val <= 600) return { label: 'MODERADO', color: '#FBBF24', tailwind: 'text-amber-600 bg-amber-50 border-amber-100' };
       if (val >= 601 && val <= 1200) return { label: 'PROLONGADO', color: '#F97316', tailwind: 'text-orange-600 bg-orange-50 border-orange-100' };
-      if (val >= 1201 && val <= 1800) return { label: 'EXCESSIVO', color: '#A855F7', tailwind: 'text-purple-600 bg-purple-50 border-purple-100' };
+      if (val >= 1201 && val <= 1800) return { label: 'EXCESSIVO', color: '#2563EB', tailwind: 'text-blue-600 bg-blue-50 border-blue-100' };
       if (val >= 1801) return { label: 'CRÍTICO', color: '#DC2626', tailwind: 'text-red-700 bg-red-100 border-red-200' };
     } else {
       if (val >= 1 && val <= 14400) return { label: 'SUPERFICIAL', color: '#EF4444', tailwind: 'text-rose-600 bg-rose-50 border-rose-100' };
       if (val >= 14401 && val <= 28800) return { label: 'EFICIENTE', color: '#10B981', tailwind: 'text-emerald-600 bg-emerald-50 border-emerald-100' };
       if (val >= 28801 && val <= 43200) return { label: 'MODERADO', color: '#FBBF24', tailwind: 'text-amber-600 bg-amber-50 border-amber-100' };
       if (val >= 43201 && val <= 64800) return { label: 'PROLONGADO', color: '#F97316', tailwind: 'text-orange-600 bg-orange-50 border-orange-100' };
-      if (val >= 64801 && val <= 90000) return { label: 'EXCESSIVO', color: '#A855F7', tailwind: 'text-purple-600 bg-purple-50 border-purple-100' };
+      if (val >= 64801 && val <= 90000) return { label: 'EXCESSIVO', color: '#2563EB', tailwind: 'text-blue-600 bg-blue-50 border-blue-100' };
       if (val >= 90001) return { label: 'CRÍTICO', color: '#DC2626', tailwind: 'text-red-700 bg-red-100 border-red-200' };
     }
     return { label: 'ESTÁVEL', color: '#64748b', tailwind: 'text-slate-600 bg-slate-50 border-slate-100' };
@@ -2117,6 +2156,17 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
   const datePopupRef = useRef<HTMLDivElement>(null);
   const modalDatePopupRef = useRef<HTMLDivElement>(null);
 
+  // Sync calendar with data month/year when data changes
+  useEffect(() => {
+    if (data.length > 0) {
+      // Find the most recent call date to set the calendar view
+      const dates = data.map(d => d.startTime.getTime());
+      const mostRecent = new Date(Math.max(...dates));
+      setSelectedMonth(mostRecent.getMonth());
+      setSelectedYear(mostRecent.getFullYear());
+    }
+  }, [data]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (datePopupRef.current && !datePopupRef.current.contains(event.target as Node)) {
@@ -2157,7 +2207,8 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
   const agents = useMemo(() => {
     const s = new Set<string>();
     data.forEach(d => {
-      if (d.agentName && d.agentName !== 'Ligações Perdidas') s.add(d.agentName);
+      const name = formatAgentName(d.agentName);
+      if (name && name !== 'Ligações Perdidas') s.add(name);
     });
     return ['Todos', ...Array.from(s).sort()];
   }, [data]);
@@ -2175,7 +2226,8 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
         // Exclude lost calls (abandon) from productivity count
         if (d.leftQueueReason?.toLowerCase() === 'abandon') return;
 
-        if (selectedAgent === 'Todos' || d.agentName === selectedAgent) {
+        const prettyName = formatAgentName(d.agentName);
+        if (selectedAgent === 'Todos' || prettyName === selectedAgent) {
           const key = format(d.startTime, 'yyyy-MM-dd');
           stats[key] = (stats[key] || 0) + 1;
         }
@@ -2783,6 +2835,9 @@ function LogsTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
           stringVal = item._dateFormatted || '-';
         } else if (col === 'status' || col === 'leftQueueReason') {
           stringVal = item._status || '-';
+        } else if (col === 'movedAt' || col === 'resolutionDate' || col === 'slaN2FirstEntry' || col === 'slaN2FirstExit') {
+          const val = item[col as keyof CallData];
+          stringVal = val instanceof Date ? format(val, 'dd/MM/yyyy HH:mm') : String(val || '-');
         } else {
           const val = item[col as keyof CallData];
           stringVal = String(val || '-');
@@ -3142,6 +3197,9 @@ function DataTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
           stringVal = item._dateFormatted || '-';
         } else if (col === 'status' || col === 'leftQueueReason') {
           stringVal = item._status || '-';
+        } else if (col === 'movedAt' || col === 'resolutionDate' || col === 'slaN2FirstEntry' || col === 'slaN2FirstExit') {
+          const val = item[col as keyof CallData];
+          stringVal = val instanceof Date ? format(val, 'dd/MM/yyyy HH:mm') : String(val || '-');
         } else {
           const val = item[col as keyof CallData];
           stringVal = String(val || '-');
@@ -3660,7 +3718,7 @@ const AnalysisOfTicketsView = memo(({ data, allUniqueValues }: { data: CallData[
           label="Equipes Identificadas" 
           value={uniqueGroups.toString()} 
           icon={Users} 
-          color="text-purple-600"
+          color="text-blue-700"
           subtitle="Equipes únicas"
           trendValue="Classificação"
         />
@@ -3872,7 +3930,8 @@ function RankingPerformance({ data }: { data: CallData[] }) {
   
   const rankings = useMemo(() => {
     const agentStats = data.reduce((acc, call) => {
-      const name = call.agentName || 'Não atribuído';
+      const rawName = call.agentName || 'Não atribuído';
+      const name = formatAgentName(rawName);
       if (!acc[name]) acc[name] = { tickets: 0, totalSeconds: 0 };
       acc[name].tickets += 1;
       
@@ -4020,6 +4079,28 @@ function RankingPerformance({ data }: { data: CallData[] }) {
 }
 
 function SubjectsRankingModal({ isOpen, onClose, subjects, onSubjectClick }: { isOpen: boolean, onClose: () => void, subjects: { name: string, primaryName: string, value: number, percentage: number, names: string[] }[], onSubjectClick: (names: string[], primaryName: string) => void }) {
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Clear search on open/close
+  useEffect(() => {
+    if (!isOpen) {
+      setSearchTerm('');
+    }
+  }, [isOpen]);
+
+  const filteredSubjects = useMemo(() => {
+    if (!searchTerm) return subjects;
+    const lower = searchTerm.toLowerCase();
+    return subjects.filter(sub => 
+      sub.name.toLowerCase().includes(lower) || 
+      sub.names.some(n => n.toLowerCase().includes(lower))
+    );
+  }, [subjects, searchTerm]);
+
+  const totalFilteredTickets = useMemo(() => {
+    return filteredSubjects.reduce((acc, sub) => acc + sub.value, 0);
+  }, [filteredSubjects]);
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -4051,33 +4132,69 @@ function SubjectsRankingModal({ isOpen, onClose, subjects, onSubjectClick }: { i
                 <X className="h-6 w-6 text-slate-400" />
               </button>
             </div>
-            <div className="flex-1 overflow-auto p-6 space-y-4">
-              {subjects.map((item, idx) => (
-                <div 
-                  key={idx} 
-                  className="space-y-2 p-3 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all cursor-pointer group"
-                  onClick={() => onSubjectClick(item.names, item.primaryName)}
-                >
-                  <div className="flex justify-between items-center text-xs font-bold text-slate-600">
-                    <div className="flex flex-col truncate pr-4">
-                      <span className="truncate group-hover:text-orange-600 transition-colors uppercase">{item.name}</span>
-                      {item.names.length > 1 && (
-                        <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tighter mt-0.5 block truncate">
-                          Variações: {item.names.slice(1, 4).join(' | ')}{item.names.length > 4 ? '...' : ''}
-                        </span>
-                      )}
+            
+            <div className="px-6 pt-4">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Buscar assunto..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-9 pr-24 py-2.5 bg-slate-50 border border-slate-200 text-sm font-medium text-slate-900 rounded-xl outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all placeholder:text-slate-400"
+                  />
+                  {searchTerm && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-500 bg-slate-200/50 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                      {totalFilteredTickets} tickets
                     </div>
-                    <span className="shrink-0">{item.value} tickets ({item.percentage}%)</span>
-                  </div>
-                  <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: `${item.percentage}%` }}
-                      className="h-full bg-orange-500 rounded-full"
-                    />
-                  </div>
+                  )}
                 </div>
-              ))}
+                {searchTerm && filteredSubjects.length > 0 && (
+                  <button
+                    onClick={() => onSubjectClick(filteredSubjects.flatMap(s => s.names), `Resultados da busca: ${searchTerm}`)}
+                    className="shrink-0 px-4 py-2.5 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-colors shadow-sm uppercase tracking-wide"
+                  >
+                    Ver Todos
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto p-6 pt-4 space-y-4">
+              {filteredSubjects.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                  <Search className="h-8 w-8 mb-3 opacity-20" />
+                  <p className="text-sm font-medium">Nenhum assunto encontrado para "{searchTerm}"</p>
+                </div>
+              ) : (
+                filteredSubjects.map((item, idx) => (
+                  <div 
+                    key={idx} 
+                    className="space-y-2 p-3 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all cursor-pointer group"
+                    onClick={() => onSubjectClick(item.names, item.primaryName)}
+                  >
+                    <div className="flex justify-between items-center text-xs font-bold text-slate-600">
+                      <div className="flex flex-col truncate pr-4">
+                        <span className="truncate group-hover:text-orange-600 transition-colors uppercase">{item.name}</span>
+                        {item.names.length > 1 && (
+                          <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tighter mt-0.5 block truncate">
+                            Variações: {item.names.slice(1, 4).join(' | ')}{item.names.length > 4 ? '...' : ''}
+                          </span>
+                        )}
+                      </div>
+                      <span className="shrink-0">{item.value} tickets ({item.percentage}%)</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${item.percentage}%` }}
+                        className="h-full bg-orange-500 rounded-full"
+                      />
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
             <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex justify-end">
               <button 
