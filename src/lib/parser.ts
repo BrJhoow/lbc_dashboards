@@ -168,7 +168,7 @@ export function parseCSVData(csvString: string): CallData[] {
       const clienteStr = String(r['Cliente'] || '').trim();
       const dataStr = String(r['Data'] || '').trim(); // e.g. "13/04/2026, 08:28"
       
-      if (!dataStr || clienteStr.toLowerCase().startsWith('contagem')) {
+      if (!dataStr || clienteStr.toLowerCase().includes('contagem')) {
         return; // skip summary rows or rows without a date
       }
 

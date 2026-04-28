@@ -126,7 +126,7 @@ export default function App() {
           <div className="flex flex-col md:flex-row justify-between items-center pb-4 gap-4">
             <div className="flex items-center gap-3 w-full md:w-auto">
               <img src="https://i.imgur.com/FOBkZRr.png" alt="LBC" className="h-8 w-auto object-contain" />
-              <h1 className="font-bold text-slate-800 text-lg">Dashboard</h1>
+              <h1 className="font-bold text-slate-800 text-lg">Workspace</h1>
             </div>
             
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">

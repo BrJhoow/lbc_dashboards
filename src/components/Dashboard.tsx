@@ -432,7 +432,23 @@ const formatToHMM = (seconds: number) => {
 const N1_AGENTS_LIST = [...TEAM_MAPPING['Cart. A+B'], ...TEAM_MAPPING['Cart. C+D+E']];
 const N2_AGENTS_LIST = TEAM_MAPPING['N2'];
 
-const AtendimentosView = memo(({ data: viewData, allUniqueValues, onSearchChange, searchTerm }: { data: CallData[], allUniqueValues: Record<string, string[]>, onSearchChange: (val: string) => void, searchTerm: string }) => {
+const AtendimentosView = memo(({ 
+  data: viewData, 
+  allUniqueValues, 
+  onSearchChange, 
+  searchTerm,
+  dateRange,
+  setDateRange,
+  initialDateRange
+}: { 
+  data: CallData[], 
+  allUniqueValues: Record<string, string[]>, 
+  onSearchChange: (val: string) => void, 
+  searchTerm: string,
+  dateRange?: DateRange,
+  setDateRange: (range: DateRange | undefined) => void,
+  initialDateRange?: DateRange
+}) => {
   const n1Calls = useMemo(() => viewData.filter(d => N1_AGENTS_LIST.some(ag => d.agentName.includes(ag))), [viewData]);
   const n2Calls = useMemo(() => viewData.filter(d => N2_AGENTS_LIST.some(ag => d.agentName.includes(ag))), [viewData]);
 
@@ -444,11 +460,26 @@ const AtendimentosView = memo(({ data: viewData, allUniqueValues, onSearchChange
 
   return (
     <>
-      <MetricsCards data={viewData} />
+      <MetricsCards 
+        data={viewData} 
+        dateRange={dateRange} 
+        setDateRange={setDateRange} 
+        initialDateRange={initialDateRange} 
+      />
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 shrink-0">
-        <ChartCallsOverTime data={viewData} />
-        <ChartAgentPerformance data={viewData} />
+        <ChartCallsOverTime 
+          data={viewData} 
+          dateRange={dateRange} 
+          setDateRange={setDateRange} 
+          initialDateRange={initialDateRange} 
+        />
+        <ChartAgentPerformance 
+          data={viewData} 
+          dateRange={dateRange} 
+          setDateRange={setDateRange} 
+          initialDateRange={initialDateRange} 
+        />
       </div>
 
       <div className="shrink-0 flex flex-col gap-6">
@@ -490,6 +521,10 @@ const AtendimentosView = memo(({ data: viewData, allUniqueValues, onSearchChange
             trendValue="Estável"
           />
         </div>
+      </div>
+
+      <div className="shrink-0 flex flex-col gap-6 w-full">
+        <AgentDetailedProductivityCard data={viewData} />
       </div>
 
       <div className="shrink-0">
@@ -551,6 +586,17 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const calendarRef = useRef<HTMLDivElement>(null);
 
+  const initialDateRange = useMemo(() => {
+    if (data.length === 0) return undefined;
+    const dates = data.map(d => d.startTime.getTime()).filter(t => !isNaN(t));
+    if (dates.length === 0) return undefined;
+    
+    return {
+      from: startOfDay(new Date(Math.min(...dates))),
+      to: endOfDay(new Date(Math.max(...dates)))
+    };
+  }, [data]);
+
   // Pre-calculate unique values for column filters to avoid expensive re-computations in tables
   const allColumnUniqueValues = useMemo(() => {
     if (!data || data.length === 0) return {};
@@ -582,18 +628,10 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
   }, [data]);
 
   useEffect(() => {
-    if (data.length > 0) {
-      const dates = data.map(d => d.startTime.getTime()).filter(t => !isNaN(t));
-      if (dates.length > 0) {
-        const min = new Date(Math.min(...dates));
-        const max = new Date(Math.max(...dates));
-        setDateRange({
-          from: startOfDay(min),
-          to: endOfDay(max)
-        });
-      }
+    if (initialDateRange && !dateRange) {
+      setDateRange(initialDateRange);
     }
-  }, [data]);
+  }, [initialDateRange, dateRange]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -976,6 +1014,9 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
             allUniqueValues={allColumnUniqueValues} 
             searchTerm={searchTerm} 
             onSearchChange={setSearchTerm} 
+            dateRange={dateRange}
+            setDateRange={setDateRange}
+            initialDateRange={initialDateRange}
           />
         </>
       ) : (
@@ -1077,7 +1118,17 @@ const MetricBox = memo(({
   );
 });
 
-function MetricsCards({ data }: { data: CallData[] }) {
+function MetricsCards({ 
+  data, 
+  dateRange, 
+  setDateRange, 
+  initialDateRange 
+}: { 
+  data: CallData[], 
+  dateRange?: DateRange, 
+  setDateRange: (range: DateRange | undefined) => void,
+  initialDateRange?: DateRange
+}) {
   const [activeMetric, setActiveMetric] = useState<'avg' | 'total'>('avg');
   const [localAgent, setLocalAgent] = useState('Todos');
   const [isLocalAgentOpen, setIsLocalAgentOpen] = useState(false);
@@ -1107,18 +1158,32 @@ function MetricsCards({ data }: { data: CallData[] }) {
   }, [data]);
 
   const cardsData = useMemo(() => {
-    if (localAgent === 'Todos') return data;
-    return data.filter(d => d.agentName === localAgent);
-  }, [data, localAgent]);
+    let filtered = data;
+    if (dateRange?.from) {
+      const dStart = startOfDay(dateRange.from);
+      const dEnd = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+      filtered = filtered.filter(d => d.startTime >= dStart && d.startTime <= dEnd);
+    }
+    if (localAgent === 'Todos') return filtered;
+    return filtered.filter(d => d.agentName === localAgent);
+  }, [data, localAgent, dateRange]);
 
-  const abandonedCalls = cardsData.filter(d => d.leftQueueReason === 'abandon');
+  const totaisData = useMemo(() => {
+    if (!dateRange?.from) return data;
+    const dStart = startOfDay(dateRange.from);
+    const dEnd = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+    return data.filter(d => d.startTime >= dStart && d.startTime <= dEnd);
+  }, [data, dateRange]);
+
+  // Variables for Totais de Atendimentos
+  const abandonedCalls = totaisData.filter(d => d.leftQueueReason === 'abandon');
   const lostLongWait = abandonedCalls.filter(d => d.waitTime >= 60);
   const lostShortWait = abandonedCalls.filter(d => d.waitTime < 60);
   
-  const pendenteCalls = cardsData.filter(d => d.leftQueueReason === 'pendente');
-  const answeredCalls = cardsData.filter(d => d.leftQueueReason === 'answered');
+  const pendenteCalls = totaisData.filter(d => d.leftQueueReason === 'pendente');
+  const answeredCalls = totaisData.filter(d => d.leftQueueReason === 'answered');
 
-  const totalCalls = cardsData.length;
+  const totalCalls = totaisData.length;
   const abandonRate = totalCalls > 0 ? Math.round((abandonedCalls.length / totalCalls) * 100) : 0;
   const longWaitRate = totalCalls > 0 ? (lostLongWait.length / totalCalls) * 100 : 0;
   const shortWaitRate = totalCalls > 0 ? (lostShortWait.length / totalCalls) * 100 : 0;
@@ -1129,9 +1194,11 @@ function MetricsCards({ data }: { data: CallData[] }) {
   const pendenteRate = totalCalls > 0 ? Math.round((pendenteCalls.length / totalCalls) * 100) : 0;
   const answeredRate = totalCalls > 0 ? Math.round((answeredCalls.length / totalCalls) * 100) : 0;
 
+  // Variables for Desempenho de atendimento (Gauge)
+  const gaugeAnsweredCalls = cardsData.filter(d => d.leftQueueReason === 'answered');
   const totalTalkTime = cardsData.reduce((acc, curr) => acc + curr.talkDuration, 0);
-  const avgTalkTime = answeredCalls.length > 0 
-    ? Math.round(totalTalkTime / answeredCalls.length)
+  const avgTalkTime = gaugeAnsweredCalls.length > 0 
+    ? Math.round(totalTalkTime / gaugeAnsweredCalls.length)
     : 0;
 
   // Gauge Logic - Better thresholds for "Fidelity"
@@ -1223,8 +1290,10 @@ function MetricsCards({ data }: { data: CallData[] }) {
   return (
     <section className="grid grid-cols-1 lg:grid-cols-4 gap-6 shrink-0">
       {/* Totais de atendimentos */}
-      <div className="lg:col-span-2 bg-white text-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col relative overflow-hidden">
-        <h3 className="text-base font-bold mb-8 text-slate-900 uppercase tracking-wide">Totais de atendimentos</h3>
+      <div className="lg:col-span-2 bg-white text-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col relative z-20">
+        <div className="flex justify-between items-start mb-8 relative z-30">
+          <h3 className="text-base font-bold text-slate-900 uppercase tracking-wide mb-0">Totais de atendimentos</h3>
+        </div>
         
         <div className="flex flex-1 items-center gap-12 mb-4">
           <div className="flex flex-col shrink-0">
@@ -1304,8 +1373,8 @@ function MetricsCards({ data }: { data: CallData[] }) {
       </div>
 
       {/* Unified Talk Time Metrics Card */}
-      <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col h-full relative overflow-hidden">
-        <div className="flex justify-between items-start mb-2">
+      <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col h-full relative z-10">
+        <div className="flex justify-between items-start mb-2 relative z-20">
           <h3 className="text-base font-bold text-slate-900 uppercase tracking-wide">Desempenho de atendimento</h3>
           
           <div className="relative" ref={localAgentRef}>
@@ -1457,8 +1526,19 @@ function MetricCard({ title, value, subtext, isWarning }: any) {
   );
 }
 
-function ChartCallsOverTime({ data }: { data: CallData[] }) {
+function ChartCallsOverTime({ 
+  data, 
+  dateRange, 
+  setDateRange, 
+  initialDateRange 
+}: { 
+  data: CallData[], 
+  dateRange?: DateRange, 
+  setDateRange: (range: DateRange | undefined) => void,
+  initialDateRange?: DateRange
+}) {
   const [hiddenKeys, setHiddenKeys] = useState<string[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleLegendClick = (o: any) => {
     const { dataKey } = o;
@@ -1471,9 +1551,16 @@ function ChartCallsOverTime({ data }: { data: CallData[] }) {
     return originalColor;
   };
 
+  const filteredData = useMemo(() => {
+    if (!dateRange?.from) return data;
+    const dStart = startOfDay(dateRange.from);
+    const dEnd = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+    return data.filter(d => d.startTime >= dStart && d.startTime <= dEnd);
+  }, [data, dateRange]);
+
   const chartData = useMemo(() => {
     // Group by day and hour
-    const counts = data.reduce((acc, call) => {
+    const counts = filteredData.reduce((acc, call) => {
       if (!call.startTime || isNaN(call.startTime.getTime())) return acc;
       const key = format(call.startTime, 'dd/MM HH:00');
       
@@ -1512,13 +1599,25 @@ function ChartCallsOverTime({ data }: { data: CallData[] }) {
         if (dayA !== dayB) return dayA - dayB;
         return hourA - hourB;
       });
-  }, [data, hiddenKeys]);
+  }, [filteredData, hiddenKeys]);
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 h-80 flex flex-col relative shadow-sm">
-      <h3 className="text-sm font-semibold mb-3 text-slate-900">Volume de Chamadas por Data/Hora</h3>
-      <div className="flex-1 min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
+    <>
+      <div className="bg-white rounded-xl border border-slate-200 p-4 h-80 flex flex-col relative shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-slate-900">Volume de Chamadas por Data/Hora</h3>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setIsModalOpen(true)}
+              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+              title="Expandir visualização"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 min-h-0">
+          <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
             <XAxis 
@@ -1549,16 +1648,93 @@ function ChartCallsOverTime({ data }: { data: CallData[] }) {
         </ResponsiveContainer>
       </div>
     </div>
+    
+    <AnimatePresence>
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ type: "spring", duration: 0.5, bounce: 0 }}
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden w-full max-w-[90vw] h-[90vh]"
+          >
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50">
+              <h3 className="text-lg font-bold text-slate-900">Volume de Chamadas por Data/Hora (Ampliado)</h3>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="flex-1 p-6 relative overflow-hidden bg-slate-50/30">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 60 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                  <XAxis 
+                    dataKey="time" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    angle={-45}
+                    textAnchor="end"
+                    height={60}
+                    tick={{ fontSize: 11, fill: '#64748B' }} 
+                  />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} />
+                  <Tooltip
+                    cursor={{ fill: '#F1F5F9' }}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                  />
+                  <Legend 
+                    wrapperStyle={{ fontSize: '13px', paddingTop: '20px', cursor: 'pointer' }}
+                    onClick={handleLegendClick}
+                    formatter={(value) => (
+                      <span className={hiddenKeys.includes(value === 'Atendidas' ? 'atendidas' : value === 'Pendente' ? 'pendente' : value === 'Perdidas < 1m' ? 'perdidas_baixo_1m' : 'perdidas') ? 'text-slate-300 line-through' : ''}>
+                        {value}
+                      </span>
+                    )}
+                  />
+                  <Bar dataKey="atendidas" stackId="a" fill={getBarColor("#10B981")} radius={[0, 0, 0, 0]} name="Atendidas" isAnimationActive={true} animationDuration={500} />
+                  <Bar dataKey="pendente" stackId="a" fill={getBarColor("#3B82F6")} radius={[0, 0, 0, 0]} name="Pendente" isAnimationActive={true} animationDuration={500} />
+                  <Bar dataKey="perdidas_baixo_1m" stackId="a" fill={getBarColor("#FB923C")} radius={[0, 0, 0, 0]} name="Perdidas < 1m" isAnimationActive={true} animationDuration={500} />
+                  <Bar dataKey="perdidas" stackId="a" fill={getBarColor("#EF4444")} radius={[4, 4, 0, 0]} name="Perdidas > 1m" isAnimationActive={true} animationDuration={500} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+    </>
   );
 }
 
-function ChartAgentPerformance({ data }: { data: CallData[] }) {
+function ChartAgentPerformance({ 
+  data, 
+  dateRange, 
+  setDateRange, 
+  initialDateRange 
+}: { 
+  data: CallData[], 
+  dateRange?: DateRange, 
+  setDateRange: (range: DateRange | undefined) => void,
+  initialDateRange?: DateRange
+}) {
   const [hiddenKeys, setHiddenKeys] = useState<string[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalSearch, setModalSearch] = useState('');
 
+  const filteredData = useMemo(() => {
+    if (!dateRange?.from) return data;
+    const dStart = startOfDay(dateRange.from);
+    const dEnd = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+    return data.filter(d => d.startTime >= dStart && d.startTime <= dEnd);
+  }, [data, dateRange]);
+
   const { chartData, techniciansCount, allAgentsData } = useMemo(() => {
-    const agents = data.reduce((acc, call) => {
+    const agents = filteredData.reduce((acc, call) => {
       const name = call.agentName || 'Não Atribuído';
       if (name === 'Não Atribuído' || name.trim() === '') return acc;
       
@@ -1602,7 +1778,7 @@ function ChartAgentPerformance({ data }: { data: CallData[] }) {
       allAgentsData: sortedAgents,
       techniciansCount: techCount
     };
-  }, [data, hiddenKeys]);
+  }, [filteredData, hiddenKeys]);
 
   const filteredModalData = useMemo(() => {
     if (!modalSearch.trim()) return allAgentsData;
@@ -1612,7 +1788,7 @@ function ChartAgentPerformance({ data }: { data: CallData[] }) {
   }, [allAgentsData, modalSearch]);
 
   const activeIdealPoint = useMemo(() => {
-    const totalActiveCalls = data.filter(call => {
+    const totalActiveCalls = filteredData.filter(call => {
       const reason = call.leftQueueReason?.toLowerCase() || '';
       const isShortWait = (call.waitTime || 0) < 60;
       
@@ -1626,7 +1802,7 @@ function ChartAgentPerformance({ data }: { data: CallData[] }) {
     }).length;
     
     return techniciansCount > 0 ? Math.round(totalActiveCalls / techniciansCount) : 0;
-  }, [data, hiddenKeys, techniciansCount]);
+  }, [filteredData, hiddenKeys, techniciansCount]);
 
   const handleLegendClick = (o: any) => {
     const { dataKey } = o;
@@ -1644,13 +1820,15 @@ function ChartAgentPerformance({ data }: { data: CallData[] }) {
     <div className="bg-white rounded-xl border border-slate-200 p-4 h-80 flex flex-col relative shadow-sm">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-slate-900">Produtividade dos operadores</h3>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-          title="Expandir visualização"
-        >
-          <Maximize2 className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+            title="Expandir visualização"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </button>
+        </div>
       </div>
       <div className="flex-1 min-h-0">
         <ResponsiveContainer width="100%" height="100%">
@@ -1990,6 +2168,513 @@ function RecurringNumbersCard({ data, onFilter, activeFilter }: { data: CallData
   );
 }
 
+function AgentDetailedProductivityCard({ data }: { data: CallData[] }) {
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedTeams, setSelectedTeams] = useState<string[]>(['Cart. A+B']);
+  const [selectedSchedules, setSelectedSchedules] = useState<string[]>([]);
+  const [isDatePopupOpen, setIsDatePopupOpen] = useState(false);
+  const [isTeamDropdownOpen, setIsTeamDropdownOpen] = useState(false);
+  const [isScheduleDropdownOpen, setIsScheduleDropdownOpen] = useState(false);
+  const datePopupRef = useRef<HTMLDivElement>(null);
+  const teamDropdownRef = useRef<HTMLDivElement>(null);
+  const scheduleDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (data.length > 0) {
+      const dates = data.map(d => d.startTime.getTime());
+      const mostRecent = new Date(Math.max(...dates));
+      setSelectedMonth(mostRecent.getMonth());
+      setSelectedYear(mostRecent.getFullYear());
+    }
+  }, [data]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (datePopupRef.current && !datePopupRef.current.contains(event.target as Node)) {
+        setIsDatePopupOpen(false);
+      }
+      if (teamDropdownRef.current && !teamDropdownRef.current.contains(event.target as Node)) {
+        setIsTeamDropdownOpen(false);
+      }
+      if (scheduleDropdownRef.current && !scheduleDropdownRef.current.contains(event.target as Node)) {
+        setIsScheduleDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handlePrevMonth = () => {
+    if (selectedMonth === 0) {
+      setSelectedMonth(11);
+      setSelectedYear(selectedYear - 1);
+    } else {
+      setSelectedMonth(selectedMonth - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (selectedMonth === 11) {
+      setSelectedMonth(0);
+      setSelectedYear(selectedYear + 1);
+    } else {
+      setSelectedMonth(selectedMonth + 1);
+    }
+  };
+
+  const monthNames = [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+  ];
+
+  const teamsSet = useMemo(() => {
+    const teams = new Set<string>();
+    data.forEach(d => {
+      if (d._team && d._team !== 'Sem Origem') teams.add(d._team);
+    });
+    return Array.from(teams).sort();
+  }, [data]);
+
+  const calendarData = useMemo(() => {
+     const start = startOfMonth(new Date(selectedYear, selectedMonth));
+     const end = endOfMonth(start);
+     const daysInMonth = eachDayOfInterval({ start, end });
+     
+     const activeAgentsSet = new Set<string>();
+
+     const isCoordenacaoAgent = (agentStr: string) => {
+       const a = agentStr.toLowerCase();
+       return a.includes('johnny morais') || a.includes('brener');
+     };
+
+     const isCDEAgent = (agentStr: string) => {
+       return TEAM_MAPPING['Cart. C+D+E']?.some(a => agentStr.toLowerCase().includes(a.toLowerCase()));
+     };
+     
+     const isCartAQueue = (q: string) => {
+       const ql = q.toLowerCase();
+       return ql === 'fila carteira a' || ql.includes('carteira b');
+     };
+
+     const checkIncludesTeam = (d: CallData) => {
+       const qLower = d.queue.toLowerCase();
+       const isCartA = isCartAQueue(qLower);
+       
+       let isAuxCDECall = false;
+       if (d.agentName && isCDEAgent(d.agentName) && isCartA) {
+          isAuxCDECall = true;
+       }
+
+       let matchTeam = selectedTeams.length === 0 || (d._team && selectedTeams.includes(d._team));
+       if (isAuxCDECall && (selectedTeams.length === 0 || selectedTeams.includes('Cart. A+B'))) {
+          matchTeam = true;
+       }
+       return { matchTeam, isAuxCDECall };
+     };
+
+     data.forEach(d => {
+       const dMonth = d.startTime.getMonth();
+       const dYear = d.startTime.getFullYear();
+
+       const matchSchedule = selectedSchedules.length === 0 || selectedSchedules.includes(d._schedule || '');
+
+       if (dMonth === selectedMonth && dYear === selectedYear && matchSchedule) {
+         const { matchTeam, isAuxCDECall } = checkIncludesTeam(d);
+
+         if (matchTeam) {
+           let name = formatAgentName(d.agentName);
+           if (name && name !== 'Ligações Perdidas' && name.toUpperCase() !== 'AGENTE QA OFFLINE') {
+             if (isCoordenacaoAgent(name)) {
+               name = 'Coordenação';
+             } else if (isAuxCDECall && (selectedTeams.length === 0 || selectedTeams.includes('Cart. A+B'))) {
+               name = 'Auxílio CDE';
+             }
+             activeAgentsSet.add(name);
+           }
+         }
+       }
+     });
+
+     const rawAgents = Array.from(activeAgentsSet).sort();
+     const agents = rawAgents.filter(a => a !== 'Coordenação' && a !== 'Auxílio CDE');
+     if (activeAgentsSet.has('Coordenação')) agents.push('Coordenação');
+     if (activeAgentsSet.has('Auxílio CDE')) agents.push('Auxílio CDE');
+
+     const grid: Record<string, Record<string, number>> = {};
+     agents.forEach(a => grid[a] = {});
+     
+     const dailyTotals: Record<string, { count: number, agentsWorked: number, chat: number, calls: number, total: number, lost: number }> = {};
+     
+     daysInMonth.forEach(d => {
+       const key = format(d, 'yyyy-MM-dd');
+       dailyTotals[key] = { count: 0, agentsWorked: 0, chat: 0, calls: 0, total: 0, lost: 0 };
+     });
+
+     data.forEach(d => {
+       const dMonth = d.startTime.getMonth();
+       const dYear = d.startTime.getFullYear();
+       
+       const matchSchedule = selectedSchedules.length === 0 || selectedSchedules.includes(d._schedule || '');
+
+       if (dMonth === selectedMonth && dYear === selectedYear && matchSchedule) {
+         const { matchTeam, isAuxCDECall } = checkIncludesTeam(d);
+
+         if (matchTeam) {
+           const key = format(d.startTime, 'yyyy-MM-dd');
+           let name = formatAgentName(d.agentName);
+           
+           if (name && name !== 'Ligações Perdidas' && name.toUpperCase() !== 'AGENTE QA OFFLINE') {
+             if (isCoordenacaoAgent(name)) {
+               name = 'Coordenação';
+             } else if (isAuxCDECall && (selectedTeams.length === 0 || selectedTeams.includes('Cart. A+B'))) {
+               name = 'Auxílio CDE';
+             }
+           }
+           
+            const isAbandoned = (d.leftQueueReason?.toLowerCase() === 'abandon' || d.status?.toLowerCase() === 'canceled') && (d.waitTime >= 60); 
+
+            if (isAbandoned || (name === 'Ligações Perdidas' && d.waitTime >= 60)) {
+              if (dailyTotals[key]) dailyTotals[key].lost += 1;
+            } else {
+             if (dailyTotals[key]) {
+               if (d.origin === 'Chat') dailyTotals[key].chat += 1;
+               else dailyTotals[key].calls += 1;
+               dailyTotals[key].total += 1;
+
+               if (agents.includes(name)) {
+                 grid[name][key] = (grid[name][key] || 0) + 1;
+                 dailyTotals[key].count += 1;
+               }
+             }
+           }
+         }
+       }
+     });
+
+     daysInMonth.forEach(d => {
+       const key = format(d, 'yyyy-MM-dd');
+       let aw = 0;
+       agents.forEach(a => {
+         if (grid[a][key] > 0) aw++;
+       });
+       dailyTotals[key].agentsWorked = aw;
+     });
+
+     return { daysInMonth, agents, grid, dailyTotals };
+  }, [data, selectedMonth, selectedYear, selectedTeams, selectedSchedules]);
+
+  const getTotalColor = (count: number) => {
+    if (!count) return 'bg-slate-50 text-slate-400';
+    if (count <= 180) return 'bg-rose-400 text-white font-bold';
+    if (count <= 220) return 'bg-orange-400 text-white font-bold';
+    if (count <= 240) return 'bg-amber-300 text-amber-900 font-bold';
+    return 'bg-emerald-400 text-white font-bold';
+  };
+
+  const getColor = (count: number) => {
+    if (!count) return 'bg-slate-50 border-slate-100 text-slate-400';
+    if (count <= 5) return 'bg-red-50 border-red-100 text-red-700 bg-rose-100';
+    if (count <= 15) return 'bg-amber-100 border-amber-200 text-amber-800';
+    if (count < 30) return 'bg-emerald-200 border-emerald-300 text-emerald-900';
+    return 'bg-emerald-400 border-emerald-500 text-white font-bold';
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col w-full h-full">
+      <div className="flex items-center justify-between p-4 border-b border-slate-100">
+        <h3 className="text-sm font-black text-slate-900 tracking-tight">Produtividade Detalhada por Técnico</h3>
+        <div className="flex items-center gap-2">
+          <div className="relative" ref={scheduleDropdownRef}>
+            <button 
+              onClick={() => setIsScheduleDropdownOpen(!isScheduleDropdownOpen)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 hover:border-indigo-300 transition-all shadow-sm"
+            >
+              <Clock className="h-3 w-3" />
+              {selectedSchedules.length === 0 ? "Todos Horários" : selectedSchedules.length === 1 ? selectedSchedules[0] : `${selectedSchedules.length} Horários`}
+              <ChevronDown className="h-3 w-3 text-slate-400" />
+            </button>
+            <AnimatePresence>
+              {isScheduleDropdownOpen && (
+                <TableFilterDropdown 
+                  options={SERVICE_SCHEDULES.filter(s => s !== 'Todos')}
+                  selectedValues={selectedSchedules}
+                  onToggle={(sch) => {
+                    if (selectedSchedules.includes(sch)) {
+                      setSelectedSchedules(selectedSchedules.filter(s => s !== sch));
+                    } else {
+                      setSelectedSchedules([...selectedSchedules, sch]);
+                    }
+                  }}
+                  onClose={() => setIsScheduleDropdownOpen(false)}
+                />
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div className="relative" ref={teamDropdownRef}>
+            <button 
+              onClick={() => setIsTeamDropdownOpen(!isTeamDropdownOpen)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 hover:border-indigo-300 transition-all shadow-sm"
+            >
+              <Users className="h-3 w-3" />
+              {selectedTeams.length === 0 ? "Todas Equipes" : selectedTeams.length === 1 ? selectedTeams[0] : `${selectedTeams.length} Equipes`}
+              <ChevronDown className="h-3 w-3 text-slate-400" />
+            </button>
+            <AnimatePresence>
+              {isTeamDropdownOpen && (
+                <TableFilterDropdown 
+                  options={teamsSet}
+                  selectedValues={selectedTeams}
+                  onToggle={(team) => {
+                    if (selectedTeams.includes(team)) {
+                      setSelectedTeams(selectedTeams.filter(t => t !== team));
+                    } else {
+                      setSelectedTeams([...selectedTeams, team]);
+                    }
+                  }}
+                  onClose={() => setIsTeamDropdownOpen(false)}
+                />
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-200 relative">
+            <button onClick={handlePrevMonth} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm rounded-md transition-all shrink-0">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button onClick={() => setIsDatePopupOpen(!isDatePopupOpen)} className="px-3 py-1 text-[10px] font-black text-slate-700 uppercase tracking-tighter hover:bg-white hover:shadow-sm rounded-md transition-all whitespace-nowrap min-w-[100px] text-center">
+              {monthNames[selectedMonth]} {selectedYear}
+            </button>
+            <button onClick={handleNextMonth} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm rounded-md transition-all shrink-0">
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            <AnimatePresence>
+              {isDatePopupOpen && (
+                <motion.div ref={datePopupRef} initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} className="absolute top-full right-0 mt-2 z-50 bg-white rounded-xl shadow-xl border border-slate-200 p-4 w-[240px]">
+                  <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-50">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mês</span>
+                    <div className="flex items-center gap-2">
+                       <button onClick={() => setSelectedYear(selectedYear - 1)} className="p-1 hover:bg-slate-100 rounded transition-colors"><ChevronLeft className="h-3 w-3" /></button>
+                       <span className="text-xs font-black text-slate-900">{selectedYear}</span>
+                       <button onClick={() => setSelectedYear(selectedYear + 1)} className="p-1 hover:bg-slate-100 rounded transition-colors"><ChevronRight className="h-3 w-3" /></button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {monthNames.map((m, i) => (
+                      <button key={i} onClick={() => { setSelectedMonth(i); setIsDatePopupOpen(false); }} className={`py-2 text-[9px] font-bold rounded-lg transition-all ${selectedMonth === i ? 'bg-indigo-600 text-white shadow-md shadow-indigo-100' : 'text-slate-500 hover:bg-slate-50'}`}>
+                        {m.substring(0, 3)}
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      </div>
+      
+      <div className="overflow-x-auto mx-4 mb-4 mt-2 flex-1 custom-scrollbar">
+        {calendarData.agents.length === 0 ? (
+          <div className="text-center text-slate-400 text-[11px] py-8">Nenhum atendimento encontrado para o período selecionado.</div>
+        ) : (
+          <table className="w-full text-[11px] text-left border-collapse min-w-max border border-slate-200">
+            <thead className="bg-slate-50 sticky top-0 z-10 box-border text-[9px] font-black text-slate-600 uppercase">
+              <tr>
+                <th className="px-3 py-2 border border-slate-200 bg-slate-50 font-bold sticky left-0 z-20 min-w-[120px] shadow-[1px_0_0_0_#e2e8f0]">Mês de {monthNames[selectedMonth]}</th>
+                {calendarData.daysInMonth.map((d, i) => (
+                  <th key={i} className="px-1 py-1.5 border border-slate-200 text-center min-w-[40px]">
+                    <div className="flex flex-col items-center">
+                      <span className="text-slate-500 font-black">{format(d, 'dd/MM')}</span>
+                      <span className="text-[8px] text-slate-400 font-bold capitalize">{format(d, 'E', { locale: ptBR })}</span>
+                    </div>
+                  </th>
+                ))}
+                <th className="px-3 py-1.5 border border-slate-200 bg-slate-50 text-center min-w-[60px] font-bold">Média Dia</th>
+                <th className="px-3 py-1.5 border border-slate-200 bg-slate-50 text-center min-w-[60px] font-bold">TOTAL</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white">
+              {calendarData.agents.map((agent, aIdx) => (
+                <tr key={aIdx} className="hover:bg-slate-50">
+                  <td className="px-3 py-2 border border-slate-200 font-bold text-slate-700 bg-white sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] truncate max-w-[140px]">
+                    {agent}
+                  </td>
+                  {calendarData.daysInMonth.map((d, dIdx) => {
+                    const key = format(d, 'yyyy-MM-dd');
+                    const count = calendarData.grid[agent][key] || 0;
+                    return (
+                      <td key={dIdx} className="border border-slate-200 p-0 text-center font-mono">
+                        <div className={`w-full h-full min-h-[30px] p-1 flex items-center justify-center ${getColor(count)}`}>
+                          {count > 0 ? count : '-'}
+                        </div>
+                      </td>
+                    );
+                  })}
+                  {(() => {
+                    let total = 0;
+                    let weekdaySum = 0;
+                    let weekdayCount = 0;
+                    calendarData.daysInMonth.forEach(d => {
+                      const key = format(d, 'yyyy-MM-dd');
+                      const count = calendarData.grid[agent][key] || 0;
+                      total += count;
+                      const isWeekday = d.getDay() !== 0 && d.getDay() !== 6;
+                      if (isWeekday) {
+                        weekdaySum += count;
+                        if (count > 0) weekdayCount++;
+                      }
+                    });
+                    const avg = weekdayCount > 0 ? weekdaySum / weekdayCount : 0;
+                    return (
+                      <>
+                        <td className="border border-slate-200 px-2 text-center font-bold text-slate-700 bg-slate-100/50">
+                          {avg > 0 ? avg.toFixed(2).replace('.', ',') : '-'}
+                        </td>
+                        <td className="border border-slate-200 p-0 text-center font-mono relative">
+                          <div className={`w-full h-full min-h-[30px] p-1 flex items-center justify-center ${getTotalColor(total)}`}>
+                            {total > 0 ? total : '-'}
+                          </div>
+                        </td>
+                      </>
+                    );
+                  })()}
+                </tr>
+              ))}
+
+              <tr><td colSpan={calendarData.daysInMonth.length + 3} className="h-4 border-none bg-transparent"></td></tr>
+
+              <tr className="bg-slate-50">
+                <td className="px-3 py-2 border border-slate-200 font-black text-slate-800 bg-slate-100 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]">Total diário</td>
+                {calendarData.daysInMonth.map((d, dIdx) => {
+                  const key = format(d, 'yyyy-MM-dd');
+                  const count = calendarData.dailyTotals[key].count;
+                  return <td key={dIdx} className="px-1 py-2 border border-slate-200 text-center font-black text-slate-800 bg-slate-100/50">{count}</td>;
+                })}
+                <td className="border border-slate-200 px-2 py-2 text-center font-black text-slate-400 bg-slate-100 uppercase text-[10px]">#</td>
+                {(() => {
+                  let overall = 0;
+                  calendarData.daysInMonth.forEach(d => {
+                     const key = format(d, 'yyyy-MM-dd');
+                     overall += calendarData.dailyTotals[key].count;
+                  });
+                  return <td className="border border-slate-200 px-2 py-2 text-center font-black text-slate-800 bg-slate-200">{overall}</td>;
+                })()}
+              </tr>
+              <tr className="bg-slate-50">
+                <td className="px-3 py-2 border border-slate-200 font-black text-slate-800 bg-slate-100 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]">Média</td>
+                {calendarData.daysInMonth.map((d, dIdx) => {
+                  const key = format(d, 'yyyy-MM-dd');
+                  const count = calendarData.dailyTotals[key].count;
+                  const aw = calendarData.dailyTotals[key].agentsWorked;
+                  const avg = (count > 0 && aw > 0) ? (count / aw) % 1 === 0 ? (count / aw) : (count / aw).toFixed(1).replace('.', ',') : '-';
+                  return <td key={dIdx} className="px-1 py-2 border border-slate-200 text-center font-bold text-slate-600 bg-slate-100/50">{avg}</td>;
+                })}
+                <td className="border border-slate-200 px-2 py-2 text-center font-black text-slate-400 bg-slate-100 uppercase text-[10px]">#</td>
+                {(() => {
+                  let sumCount = 0;
+                  let sumAw = 0;
+                  calendarData.daysInMonth.forEach(d => {
+                     const key = format(d, 'yyyy-MM-dd');
+                     sumCount += calendarData.dailyTotals[key].count;
+                     sumAw += calendarData.dailyTotals[key].agentsWorked;
+                  });
+                  const ovAvg = (sumCount && sumAw) ? (sumCount / sumAw) : 0;
+                  return <td className="border border-slate-200 px-2 py-2 text-center font-bold text-slate-700 bg-slate-200">{ovAvg > 0 ? ovAvg.toFixed(1).replace('.', ',') : '-'}</td>;
+                })()}
+              </tr>
+
+              <tr><td colSpan={calendarData.daysInMonth.length + 3} className="h-4 border-none bg-transparent"></td></tr>
+
+              {(() => {
+                const renderSummaryRowValues = (type: 'chat' | 'calls' | 'total' | 'lost') => {
+                  let total = 0;
+                  let weekdaySum = 0;
+                  let weekdayCount = 0;
+                  calendarData.daysInMonth.forEach(d => {
+                    const key = format(d, 'yyyy-MM-dd');
+                    const count = calendarData.dailyTotals[key][type];
+                    total += count;
+                    const isWeekday = d.getDay() !== 0 && d.getDay() !== 6;
+                    if (isWeekday) {
+                      weekdaySum += count;
+                      if (count > 0) weekdayCount++;
+                    }
+                  });
+                  const avg = weekdayCount > 0 ? weekdaySum / weekdayCount : 0;
+                  return (
+                    <>
+                      <td className="border border-slate-200 px-2 py-2 text-center font-bold text-slate-700 bg-slate-100/50">
+                        {avg > 0 ? avg.toFixed(2).replace('.', ',') : type === 'total' || type === 'lost' ? '0' : '-'}
+                      </td>
+                      <td className="border border-slate-200 px-2 py-2 text-center font-black text-slate-700 bg-slate-200/80">
+                        {total > 0 ? total : type === 'total' || type === 'lost' ? '0' : '-'}
+                      </td>
+                    </>
+                  );
+                };
+
+                return (
+                  <>
+                    <tr>
+                      <td className="px-3 py-2 border border-slate-200 font-bold text-slate-700 bg-white sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]">Total chat</td>
+                      {calendarData.daysInMonth.map((d, dIdx) => {
+                        const key = format(d, 'yyyy-MM-dd');
+                        const count = calendarData.dailyTotals[key].chat;
+                        return <td key={dIdx} className="px-1 py-2 border border-slate-200 text-center text-slate-600 bg-slate-50/50">{count > 0 ? count : '-'}</td>;
+                      })}
+                      {renderSummaryRowValues('chat')}
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-2 border border-slate-200 font-bold text-slate-700 bg-white sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]">Total ligações atendidas</td>
+                      {calendarData.daysInMonth.map((d, dIdx) => {
+                        const key = format(d, 'yyyy-MM-dd');
+                        const count = calendarData.dailyTotals[key].calls;
+                        return <td key={dIdx} className="px-1 py-2 border border-slate-200 text-center text-slate-600 bg-slate-50/50">{count > 0 ? count : '-'}</td>;
+                      })}
+                      {renderSummaryRowValues('calls')}
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-2 border border-slate-200 font-bold text-slate-700 bg-emerald-50 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]">Total de atendimentos</td>
+                      {calendarData.daysInMonth.map((d, dIdx) => {
+                        const key = format(d, 'yyyy-MM-dd');
+                        const count = calendarData.dailyTotals[key].total;
+                        return (
+                          <td key={dIdx} className="border border-slate-200 p-0 text-center font-mono">
+                            <div className={`w-full h-full min-h-[30px] p-1 flex items-center justify-center ${getColor(count)}`}>
+                              {count > 0 ? count : '-'}
+                            </div>
+                          </td>
+                        );
+                      })}
+                      {renderSummaryRowValues('total')}
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-2 border border-slate-200 font-bold text-slate-700 bg-rose-50 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]">Ligações perdidas</td>
+                      {calendarData.daysInMonth.map((d, dIdx) => {
+                        const key = format(d, 'yyyy-MM-dd');
+                        const count = calendarData.dailyTotals[key].lost;
+                        return (
+                          <td key={dIdx} className="border border-slate-200 p-0 text-center font-mono">
+                            <div className={`w-full h-full min-h-[30px] p-1 flex items-center justify-center font-bold ${count > 0 ? 'bg-rose-100 text-rose-700' : 'bg-slate-50 text-slate-400'}`}>
+                              {count > 0 ? count : '-'}
+                            </div>
+                          </td>
+                        );
+                      })}
+                      {renderSummaryRowValues('lost')}
+                    </tr>
+                  </>
+                );
+              })()}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function RecurringAgentsCard({ data, onFilter, activeFilter }: { data: CallData[], onFilter: (num: string) => void, activeFilter: string }) {
   const recurringByNumber = useMemo(() => {
     const counts = data.reduce((acc, call) => {
@@ -2246,8 +2931,9 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
   const getColor = (count: number) => {
     if (!count) return 'bg-slate-50 border-slate-100';
     if (count <= 5) return 'bg-red-50 border-red-100 text-red-700';
+    if (count <= 10) return 'bg-orange-50 border-orange-100 text-orange-700';
     if (count <= 15) return 'bg-yellow-100 border-yellow-200 text-yellow-800';
-    if (count < 30) return 'bg-emerald-200 border-emerald-300 text-emerald-900';
+    if (count <= 30) return 'bg-emerald-200 border-emerald-300 text-emerald-900';
     return 'bg-emerald-400 border-emerald-500 text-white font-bold';
   };
 
@@ -2599,16 +3285,20 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
                   <span className="text-[10px] font-bold text-slate-400 uppercase">1 - 5</span>
                 </div>
                 <div className="flex items-center gap-3">
+                  <div className="w-4 h-4 rounded bg-orange-50 border border-orange-100" />
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">6 - 10</span>
+                </div>
+                <div className="flex items-center gap-3">
                   <div className="w-4 h-4 rounded bg-yellow-100 border border-yellow-200" />
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">5 - 15</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">11 - 15</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="w-4 h-4 rounded bg-emerald-200 border border-emerald-300" />
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">15 - 30</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">16 - 30</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="w-4 h-4 rounded bg-emerald-400 border border-emerald-500" />
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">30+</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">31+</span>
                 </div>
               </div>
             </div>
