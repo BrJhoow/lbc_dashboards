@@ -113,11 +113,20 @@ export function parseCSVData(csvString: string): CallData[] {
     if (moviNumeroValue !== undefined && moviAbertoEmValue !== undefined) {
     // Movidesk Ticket Format
       const resolutionDate = parseMoviDate(findValue(['Resolvido em']));
-      const parsedDate = parseMoviDate(moviAbertoEmValue) || new Date();
+      
+      const rawAbertoEm = String(moviAbertoEmValue || '').trim();
+      if (!rawAbertoEm || String(moviNumeroValue).toLowerCase().startsWith('contagem')) {
+        return; // skip if no date or is a summary row
+      }
+
+      const parsedDate = parseMoviDate(rawAbertoEm);
+      if (!parsedDate) {
+        return; // skip rows with unparsable dates
+      }
 
       parsedData.push({
         startTime: parsedDate,
-        startTimeString: moviAbertoEmValue,
+        startTimeString: rawAbertoEm,
         callerNumber: '',
         queue: findValue(['Responsável: Equipe', 'Equipe', 'Responsvel: Equipe', 'Responsvel: Equipe']) || '',
         waitTime: 0,
@@ -156,7 +165,13 @@ export function parseCSVData(csvString: string): CallData[] {
 
     if (r['Cliente'] !== undefined && r['Data'] !== undefined) {
       // Chat Format
-      const dataStr = r['Data']; // e.g. "13/04/2026, 08:28"
+      const clienteStr = String(r['Cliente'] || '').trim();
+      const dataStr = String(r['Data'] || '').trim(); // e.g. "13/04/2026, 08:28"
+      
+      if (!dataStr || clienteStr.toLowerCase().startsWith('contagem')) {
+        return; // skip summary rows or rows without a date
+      }
+
       let parsedDate = new Date();
       if (dataStr) {
         const [datePart, timePart] = dataStr.split(', ');
@@ -167,7 +182,6 @@ export function parseCSVData(csvString: string): CallData[] {
       }
 
       let callerNumber = '';
-      const clienteStr = String(r['Cliente'] || '');
       const numberMatch = clienteStr.match(/\d{8,}$/);
       if (numberMatch) {
          callerNumber = numberMatch[0];
