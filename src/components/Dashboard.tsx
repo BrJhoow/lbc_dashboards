@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback, memo, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { CallData } from '../lib/types';
@@ -109,19 +109,77 @@ const TableFilterDropdown = ({
   selectedValues, 
   onToggle, 
   onClose,
-  align = 'left'
+  align = 'left',
+  triggerRef
 }: { 
   options: string[], 
   selectedValues: string[], 
   onToggle: (val: string) => void, 
   onClose: () => void,
-  align?: 'left' | 'right'
+  align?: 'left' | 'right',
+  triggerRef: React.RefObject<HTMLDivElement>
 }) => {
+  const [coords, setCoords] = useState(() => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const dropdownWidth = 256;
+      let finalLeft = align === 'right' ? rect.right - dropdownWidth : rect.left;
+      
+      const viewportWidth = window.innerWidth;
+      const margin = 16;
+      if (finalLeft + dropdownWidth > viewportWidth - margin) {
+        finalLeft = viewportWidth - dropdownWidth - margin;
+      }
+      if (finalLeft < margin) finalLeft = margin;
+
+      return {
+        top: rect.bottom,
+        left: finalLeft
+      };
+    }
+    return { top: 0, left: 0 };
+  });
   const [search, setSearch] = useState('');
   const filtered = options.filter(o => o.toLowerCase().includes(search.toLowerCase()));
 
-  return (
-    <div className={`absolute top-full mt-2 ${align === 'right' ? 'right-0' : 'left-0'} w-64 bg-white border border-slate-200 shadow-xl rounded-2xl z-50 flex flex-col p-2 overflow-hidden`} onClick={e => e.stopPropagation()}>
+  useLayoutEffect(() => {
+    const updatePosition = () => {
+      if (triggerRef.current) {
+        const rect = triggerRef.current.getBoundingClientRect();
+        const dropdownWidth = 256;
+        let finalLeft = align === 'right' ? rect.right - dropdownWidth : rect.left;
+        
+        const viewportWidth = window.innerWidth;
+        const margin = 16;
+        if (finalLeft + dropdownWidth > viewportWidth - margin) {
+          finalLeft = viewportWidth - dropdownWidth - margin;
+        }
+        if (finalLeft < margin) finalLeft = margin;
+
+        setCoords({
+          top: rect.bottom,
+          left: finalLeft
+        });
+      }
+    };
+
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [triggerRef, align]);
+
+  if (coords.top === 0 && coords.left === 0) return null;
+
+  return createPortal(
+    <div 
+      className={`fixed mt-2 w-64 bg-white border border-slate-200 shadow-xl rounded-2xl z-[9999] flex flex-col p-2 overflow-hidden animate-in fade-in zoom-in duration-150`}
+      style={{ top: coords.top, left: coords.left }}
+      onClick={e => e.stopPropagation()}
+    >
       <div className="p-2 border-b border-slate-100 mb-2">
         <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-full border border-slate-200 focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all">
           <Search className="h-3.5 w-3.5 text-slate-400" />
@@ -174,7 +232,8 @@ const TableFilterDropdown = ({
           OK
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -2421,6 +2480,7 @@ function AgentDetailedProductivityCard({ data }: { data: CallData[] }) {
                     }
                   }}
                   onClose={() => setIsScheduleDropdownOpen(false)}
+                  triggerRef={scheduleDropdownRef}
                 />
               )}
             </AnimatePresence>
@@ -2448,6 +2508,7 @@ function AgentDetailedProductivityCard({ data }: { data: CallData[] }) {
                     }
                   }}
                   onClose={() => setIsTeamDropdownOpen(false)}
+                  triggerRef={teamDropdownRef}
                 />
               )}
             </AnimatePresence>
@@ -3841,6 +3902,7 @@ function LogsTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
   };
 
   const Th = ({ label, colKey, extraClass = "", filterAlign = "left" }: { label: string, colKey: keyof CallData, extraClass?: string, filterAlign?: "left" | "right" }) => {
+    const triggerRef = useRef<HTMLDivElement>(null);
     const uniqueValues = allUniqueValues[colKey as string] || [];
     const activeFilters = columnFilters[colKey as string] || [];
     const isFiltered = activeFilters.length > 0;
@@ -3859,7 +3921,7 @@ function LogsTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
               sortDesc ? <ChevronDown className="h-3 w-3 text-blue-500 shrink-0" /> : <ChevronUp className="h-3 w-3 text-blue-500 shrink-0" />
             )}
           </div>
-          <div className="relative shrink-0">
+          <div className="relative shrink-0" ref={triggerRef}>
              <button 
                onClick={(e) => {
                   e.stopPropagation();
@@ -3876,6 +3938,7 @@ function LogsTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
                  onToggle={(val) => toggleFilterValue(colKey as string, val)}
                  onClose={() => setFilterDropdownOpen(null)}
                  align={filterAlign}
+                 triggerRef={triggerRef}
                />
              )}
           </div>
@@ -4215,6 +4278,7 @@ function DataTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
   };
 
   const Th = ({ label, colKey, align = "left", extraClass = "", filterAlign = "left" }: { label: string, colKey: keyof CallData, align?: "left" | "center" | "right", extraClass?: string, filterAlign?: "left" | "right" }) => {
+    const triggerRef = useRef<HTMLDivElement>(null);
     const uniqueValues = allUniqueValues[colKey as string] || [];
     const activeFilters = columnFilters[colKey as string] || [];
     const isFiltered = activeFilters.length > 0;
@@ -4233,7 +4297,7 @@ function DataTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
               sortDesc ? <ChevronDown className="h-3 w-3 text-blue-500 shrink-0" /> : <ChevronUp className="h-3 w-3 text-blue-500 shrink-0" />
             )}
           </div>
-          <div className="relative shrink-0">
+          <div className="relative shrink-0" ref={triggerRef}>
              <button 
                onClick={(e) => {
                   e.stopPropagation();
@@ -4250,6 +4314,7 @@ function DataTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
                  onToggle={(val) => toggleFilterValue(colKey as string, val)}
                  onClose={() => setFilterDropdownOpen(null)}
                  align={filterAlign}
+                 triggerRef={triggerRef}
                />
              )}
           </div>

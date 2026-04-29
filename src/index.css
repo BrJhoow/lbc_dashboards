@@ -25,3 +25,30 @@ body {
 .mask-fade {
   mask-image: linear-gradient(to right, transparent, black 15%, black 85%, transparent);
 }
+
+/* Modern & Minimalist Scrollbar Styles */
+@layer base {
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #e2e8f0; /* slate-200 */
+    border-radius: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #cbd5e1; /* slate-300 */
+  }
+
+  /* Firefox support */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #e2e8f0 transparent;
+  }
+}
