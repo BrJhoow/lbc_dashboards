@@ -249,7 +249,7 @@ export function parseCSVData(csvString: string): CallData[] {
 
     const queue = r['Queue'] || '';
     const waitTime = parseFloat(r['Wait time (s)']) || 0;
-    const leftQueueReason = r['Left Queue Reason'] || '';
+    const leftQueueReason = (r['Left Queue Reason'] || '').toLowerCase();
     const talkDuration = parseFloat(r['Talk duration (s)']) || 0;
     const callDuration = parseFloat(r['Call duration (s)']) || 0;
     const agentName = r['Agent Name'] || '';

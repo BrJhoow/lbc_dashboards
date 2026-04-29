@@ -457,6 +457,16 @@ const AtendimentosView = memo(({
   const resN1 = n1Total > 0 ? Math.round((n1Answered.length / n1Total) * 100) : 0;
   const escRate = viewData.length > 0 ? Math.round((n2Calls.length / viewData.length) * 100) : 0;
   const avgRespN2 = n2Calls.length > 0 ? Math.round(n2Calls.reduce((acc, curr) => acc + curr.waitTime, 0) / n2Calls.length) : 0;
+  
+  const callerCounts = useMemo(() => viewData.reduce((acc, call) => {
+    if (call.callerNumber && call.callerNumber !== 'Unknown' && call.callerNumber !== 'Anonymous') {
+      acc[call.callerNumber] = (acc[call.callerNumber] || 0) + 1;
+    }
+    return acc;
+  }, {} as Record<string, number>), [viewData]);
+  const uniqueCallers = Object.keys(callerCounts).length;
+  const recurringCallers = Object.values(callerCounts).filter(count => count > 1).length;
+  const recurrenceRate = uniqueCallers > 0 ? Math.round((recurringCallers / uniqueCallers) * 100) : 0;
 
   return (
     <>
@@ -486,41 +496,37 @@ const AtendimentosView = memo(({
         <AgentPerformanceSummary data={viewData} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 shrink-0 mt-2">
-        <div className="lg:col-span-1 h-full">
-          <ProductivityCalendar data={viewData} />
-        </div>
-        
-        <div className="lg:col-span-1 flex flex-col gap-6">
-          <MetricBox 
-            label="Taxa de Resolução no N1" 
-            value={`${resN1}%`} 
-            icon={CheckCircle2} 
-            color="text-emerald-600"
-            subtitle="Primeiro contato"
-            trendValue="Eficiente"
-          />
-          <AdvancedRecurrenceIndex data={viewData} />
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 shrink-0 mt-2">
+        <MetricBox 
+          label="Taxa de Resolução no N1" 
+          value={`${resN1}%`} 
+          icon={CheckCircle2} 
+          color="text-emerald-600"
+          subtitle="Primeiro contato"
+          trendValue="Eficiente"
+        />
+        <AdvancedRecurrenceIndex data={viewData} />
+        <MetricBox 
+          label="Volume de Escalonamento" 
+          value={`${escRate}%`} 
+          icon={TrendingUp} 
+          color="text-amber-600"
+          subtitle="N1 para N2"
+          trendValue="Sob controle"
+        />
+        <MetricBox 
+          label="Tempo de Resposta N2" 
+          value={formatToHMM(avgRespN2)} 
+          icon={Timer} 
+          color="text-blue-600"
+          subtitle="Média de espera"
+          trendValue="Estável"
+        />
+      </div>
 
-        <div className="lg:col-span-1 flex flex-col gap-6">
-          <MetricBox 
-            label="Volume de Escalonamento" 
-            value={`${escRate}%`} 
-            icon={TrendingUp} 
-            color="text-amber-600"
-            subtitle="N1 para N2"
-            trendValue="Sob controle"
-          />
-          <MetricBox 
-            label="Tempo de Resposta N2" 
-            value={formatToHMM(avgRespN2)} 
-            icon={Timer} 
-            color="text-indigo-600"
-            subtitle="Média de espera"
-            trendValue="Estável"
-          />
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 shrink-0 mt-2">
+        <ProductivityCalendar data={viewData} />
+        <MonthlyResultCard data={viewData} />
       </div>
 
       <div className="shrink-0 flex flex-col gap-6 w-full">
@@ -829,7 +835,7 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
                     onClick={() => toggleSchedule(sch)}
                     className={`text-left px-4 py-2 text-[12px] transition-colors hover:bg-slate-50 flex items-center ${
                       (sch === 'Todos' && selectedSchedules.length === 0) || selectedSchedules.includes(sch) 
-                      ? 'bg-indigo-50/50 text-[#2563eb] font-semibold' 
+                      ? 'bg-blue-50/50 text-[#2563eb] font-semibold' 
                       : 'text-slate-600'
                     }`}
                   >
@@ -866,7 +872,7 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
                     onClick={() => toggleTeam(team)}
                     className={`text-left px-4 py-2 text-[12px] transition-colors hover:bg-slate-50 flex items-center ${
                       (team === 'Todos' && selectedTeams.length === 0) || selectedTeams.includes(team) 
-                      ? 'bg-indigo-50/50 text-[#2563eb] font-semibold' 
+                      ? 'bg-blue-50/50 text-[#2563eb] font-semibold' 
                       : 'text-slate-600'
                     }`}
                   >
@@ -901,7 +907,7 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
               <div className="absolute top-full mt-2 left-0 w-64 bg-white border border-slate-200 shadow-xl rounded-2xl z-50 max-h-72 overflow-y-auto flex flex-col py-2">
                 <button 
                   onClick={() => setSelectedAgents([])}
-                  className={`text-left px-4 py-2 text-[12px] transition-colors hover:bg-slate-50 flex items-center ${selectedAgents.length === 0 ? 'bg-indigo-50/50 text-[#2563eb] font-semibold' : 'text-slate-600'}`}
+                  className={`text-left px-4 py-2 text-[12px] transition-colors hover:bg-slate-50 flex items-center ${selectedAgents.length === 0 ? 'bg-blue-50/50 text-[#2563eb] font-semibold' : 'text-slate-600'}`}
                 >
                   <div className="w-5 shrink-0 flex items-center">{selectedAgents.length === 0 && <Check className="h-3.5 w-3.5" />}</div>
                   Todos os técnicos...
@@ -910,7 +916,7 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
                   <button 
                     key={ag} 
                     onClick={() => toggleAgent(ag)}
-                    className={`text-left px-4 py-2 text-[12px] transition-colors hover:bg-slate-50 flex items-center ${selectedAgents.includes(ag) ? 'bg-indigo-50/50 text-[#2563eb] font-semibold' : 'text-slate-600'}`}
+                    className={`text-left px-4 py-2 text-[12px] transition-colors hover:bg-slate-50 flex items-center ${selectedAgents.includes(ag) ? 'bg-blue-50/50 text-[#2563eb] font-semibold' : 'text-slate-600'}`}
                   >
                     <div className="w-5 shrink-0 flex items-center">{selectedAgents.includes(ag) && <Check className="h-3.5 w-3.5" />}</div>
                     <span className="truncate">{ag}</span>
@@ -1049,10 +1055,10 @@ const MetricBox = memo(({
   const isMediumLong = value.length > 12 && value.length <= 25;
   
   return (
-    <div className={`bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between h-[200px] group transition-all duration-300 hover:shadow-indigo-500/10 ${className || ''}`}>
+    <div className={`bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between h-[200px] group transition-all duration-300 hover:shadow-blue-500/10 ${className || ''}`}>
       {/* Abstract pattern background */}
       <div className="absolute inset-0 opacity-10 pointer-events-none overflow-hidden">
-         <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -mr-32 -mt-32" />
+         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -mr-32 -mt-32" />
          <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl -ml-24 -mb-24" />
       </div>
 
@@ -1066,7 +1072,7 @@ const MetricBox = memo(({
               <div className="flex items-center justify-between gap-4 mt-1">
                 <p className="text-[8px] text-slate-500 uppercase font-black shrink-0">Live updates</p>
                 {trendValue && (
-                  <div className="bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter border border-indigo-500/10 shrink-0 whitespace-nowrap">
+                  <div className="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter border border-blue-500/10 shrink-0 whitespace-nowrap">
                     {trendValue}
                   </div>
                 )}
@@ -1099,7 +1105,7 @@ const MetricBox = memo(({
               </span>
             )}
           </div>
-          <div className="h-1 w-12 bg-indigo-500 rounded-full mt-3 opacity-50 shrink-0" />
+          <div className="h-1 w-12 bg-blue-500 rounded-full mt-3 opacity-50 shrink-0" />
       </div>
 
       <div className="relative z-10 flex items-end justify-between pt-3 border-t border-slate-100">
@@ -1110,7 +1116,7 @@ const MetricBox = memo(({
         
         <div className="flex gap-1 items-end h-6 shrink-0 ml-2">
           {[30, 60, 45, 90, 55].map((h, i) => (
-            <div key={i} className={`w-1 rounded-full bg-indigo-500/20`} style={{ height: `${h}%` }} />
+            <div key={i} className={`w-1 rounded-full bg-blue-500/20`} style={{ height: `${h}%` }} />
           ))}
         </div>
       </div>
@@ -1164,8 +1170,10 @@ function MetricsCards({
       const dEnd = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
       filtered = filtered.filter(d => d.startTime >= dStart && d.startTime <= dEnd);
     }
-    if (localAgent === 'Todos') return filtered;
-    return filtered.filter(d => d.agentName === localAgent);
+    if (localAgent !== 'Todos') {
+      filtered = filtered.filter(d => d.agentName === localAgent);
+    }
+    return filtered;
   }, [data, localAgent, dateRange]);
 
   const totaisData = useMemo(() => {
@@ -1380,7 +1388,7 @@ function MetricsCards({
           <div className="relative" ref={localAgentRef}>
             <button 
               onClick={() => setIsLocalAgentOpen(!isLocalAgentOpen)}
-              className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-[10px] font-bold text-slate-600 hover:border-indigo-300 transition-colors"
+              className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-[10px] font-bold text-slate-600 hover:border-blue-300 transition-colors"
             >
               <Users className="h-3 w-3" />
               <span className="truncate max-w-[80px]">{localAgent}</span>
@@ -1391,7 +1399,7 @@ function MetricsCards({
               <div className="absolute top-full right-0 mt-1 w-48 bg-white border border-slate-200 shadow-xl rounded-lg z-50 py-1 max-h-48 overflow-y-auto">
                 <button 
                   onClick={() => { setLocalAgent('Todos'); setIsLocalAgentOpen(false); }}
-                  className={`w-full text-left px-3 py-2 text-[10px] uppercase font-bold hover:bg-slate-50 border-b border-slate-50 ${localAgent === 'Todos' ? 'text-indigo-600' : 'text-slate-600'}`}
+                  className={`w-full text-left px-3 py-2 text-[10px] uppercase font-bold hover:bg-slate-50 border-b border-slate-50 ${localAgent === 'Todos' ? 'text-blue-600' : 'text-slate-600'}`}
                 >
                   Todos Operadores
                 </button>
@@ -1399,7 +1407,7 @@ function MetricsCards({
                   <button 
                     key={ag}
                     onClick={() => { setLocalAgent(ag); setIsLocalAgentOpen(false); }}
-                    className={`w-full text-left px-3 py-2 text-[10px] font-medium hover:bg-slate-50 ${localAgent === ag ? 'text-indigo-600' : 'text-slate-600'}`}
+                    className={`w-full text-left px-3 py-2 text-[10px] font-medium hover:bg-slate-50 ${localAgent === ag ? 'text-blue-600' : 'text-slate-600'}`}
                   >
                     {ag}
                   </button>
@@ -1609,7 +1617,7 @@ function ChartCallsOverTime({
           <div className="flex items-center gap-2">
             <button 
               onClick={() => setIsModalOpen(true)}
-              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
               title="Expandir visualização"
             >
               <Maximize2 className="h-4 w-4" />
@@ -1823,7 +1831,7 @@ function ChartAgentPerformance({
         <div className="flex items-center gap-2">
           <button 
             onClick={() => setIsModalOpen(true)}
-            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
             title="Expandir visualização"
           >
             <Maximize2 className="h-4 w-4" />
@@ -1949,7 +1957,7 @@ function ChartAgentPerformance({
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/50">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-indigo-600 rounded-xl shadow-md shadow-indigo-100">
+                <div className="p-2.5 bg-blue-600 rounded-xl shadow-md shadow-blue-100">
                   <BarChart2 className="h-5 w-5 text-white" />
                 </div>
                 <div>
@@ -2018,7 +2026,7 @@ function ChartAgentPerformance({
                         placeholder="BUSCAR OPERADOR..."
                         value={modalSearch}
                         onChange={(e) => setModalSearch(e.target.value)}
-                        className="bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 w-48 transition-all"
+                        className="bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 w-48 transition-all"
                       />
                     </div>
                   </div>
@@ -2153,12 +2161,12 @@ function RecurringNumbersCard({ data, onFilter, activeFilter }: { data: CallData
             return (
               <li 
                 key={num} 
-                className={`flex justify-between items-center p-2 rounded border transition-all cursor-pointer ${isActive ? 'bg-indigo-100 border-indigo-300 ring-2 ring-indigo-50' : 'bg-amber-50 border-amber-100 hover:bg-amber-100'}`}
+                className={`flex justify-between items-center p-2 rounded border transition-all cursor-pointer ${isActive ? 'bg-blue-100 border-blue-300 ring-2 ring-blue-50' : 'bg-amber-50 border-amber-100 hover:bg-amber-100'}`}
                 onClick={() => onFilter(num)}
                 title={isActive ? "Clique para remover filtro" : "Clique para filtrar as chamadas deste número"}
               >
-                <span className={`font-mono font-bold text-xs ${isActive ? 'text-indigo-900' : 'text-amber-900'}`}>{formatPhone(num)}</span>
-                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${isActive ? 'bg-indigo-200 text-indigo-900' : 'bg-amber-200 text-amber-900'}`}>{count} vezes</span>
+                <span className={`font-mono font-bold text-xs ${isActive ? 'text-blue-900' : 'text-amber-900'}`}>{formatPhone(num)}</span>
+                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${isActive ? 'bg-blue-200 text-blue-900' : 'bg-amber-200 text-amber-900'}`}>{count} vezes</span>
               </li>
             );
           })}
@@ -2388,7 +2396,7 @@ function AgentDetailedProductivityCard({ data }: { data: CallData[] }) {
           <div className="relative" ref={scheduleDropdownRef}>
             <button 
               onClick={() => setIsScheduleDropdownOpen(!isScheduleDropdownOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 hover:border-indigo-300 transition-all shadow-sm"
+              className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 hover:border-blue-300 transition-all shadow-sm"
             >
               <Clock className="h-3 w-3" />
               {selectedSchedules.length === 0 ? "Todos Horários" : selectedSchedules.length === 1 ? selectedSchedules[0] : `${selectedSchedules.length} Horários`}
@@ -2415,7 +2423,7 @@ function AgentDetailedProductivityCard({ data }: { data: CallData[] }) {
           <div className="relative" ref={teamDropdownRef}>
             <button 
               onClick={() => setIsTeamDropdownOpen(!isTeamDropdownOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 hover:border-indigo-300 transition-all shadow-sm"
+              className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 hover:border-blue-300 transition-all shadow-sm"
             >
               <Users className="h-3 w-3" />
               {selectedTeams.length === 0 ? "Todas Equipes" : selectedTeams.length === 1 ? selectedTeams[0] : `${selectedTeams.length} Equipes`}
@@ -2440,13 +2448,13 @@ function AgentDetailedProductivityCard({ data }: { data: CallData[] }) {
           </div>
 
           <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-200 relative">
-            <button onClick={handlePrevMonth} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm rounded-md transition-all shrink-0">
+            <button onClick={handlePrevMonth} className="p-1 text-slate-400 hover:text-blue-600 hover:bg-white hover:shadow-sm rounded-md transition-all shrink-0">
               <ChevronLeft className="h-4 w-4" />
             </button>
             <button onClick={() => setIsDatePopupOpen(!isDatePopupOpen)} className="px-3 py-1 text-[10px] font-black text-slate-700 uppercase tracking-tighter hover:bg-white hover:shadow-sm rounded-md transition-all whitespace-nowrap min-w-[100px] text-center">
               {monthNames[selectedMonth]} {selectedYear}
             </button>
-            <button onClick={handleNextMonth} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm rounded-md transition-all shrink-0">
+            <button onClick={handleNextMonth} className="p-1 text-slate-400 hover:text-blue-600 hover:bg-white hover:shadow-sm rounded-md transition-all shrink-0">
               <ChevronRight className="h-4 w-4" />
             </button>
             <AnimatePresence>
@@ -2462,7 +2470,7 @@ function AgentDetailedProductivityCard({ data }: { data: CallData[] }) {
                   </div>
                   <div className="grid grid-cols-3 gap-1">
                     {monthNames.map((m, i) => (
-                      <button key={i} onClick={() => { setSelectedMonth(i); setIsDatePopupOpen(false); }} className={`py-2 text-[9px] font-bold rounded-lg transition-all ${selectedMonth === i ? 'bg-indigo-600 text-white shadow-md shadow-indigo-100' : 'text-slate-500 hover:bg-slate-50'}`}>
+                      <button key={i} onClick={() => { setSelectedMonth(i); setIsDatePopupOpen(false); }} className={`py-2 text-[9px] font-bold rounded-lg transition-all ${selectedMonth === i ? 'bg-blue-600 text-white shadow-md shadow-blue-100' : 'text-slate-500 hover:bg-slate-50'}`}>
                         {m.substring(0, 3)}
                       </button>
                     ))}
@@ -2740,13 +2748,13 @@ function RecurringAgentsCard({ data, onFilter, activeFilter }: { data: CallData[
                 return (
                   <tr 
                     key={idx} 
-                    className={`transition-all cursor-pointer ${isActive ? 'bg-indigo-50 border-l-4 border-l-indigo-500' : 'hover:bg-amber-50'}`}
+                    className={`transition-all cursor-pointer ${isActive ? 'bg-blue-50 border-l-4 border-l-blue-500' : 'hover:bg-amber-50'}`}
                     onClick={() => onFilter(item.rawNum)}
                     title={isActive ? "Clique para remover filtro" : "Clique para filtrar as chamadas deste número"}
                   >
-                    <td className={`px-3 py-2 font-mono text-[11px] font-bold ${isActive ? 'text-indigo-700' : 'text-slate-900'}`}>{item.num}</td>
+                    <td className={`px-3 py-2 font-mono text-[11px] font-bold ${isActive ? 'text-blue-700' : 'text-slate-900'}`}>{item.num}</td>
                     <td className="px-3 py-2 text-center">
-                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full inline-block ${isActive ? 'bg-indigo-200 text-indigo-800' : 'bg-indigo-50 text-indigo-700'}`}>
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full inline-block ${isActive ? 'bg-blue-200 text-blue-800' : 'bg-blue-50 text-blue-700'}`}>
                         {item.total}
                       </span>
                     </td>
@@ -2759,7 +2767,7 @@ function RecurringAgentsCard({ data, onFilter, activeFilter }: { data: CallData[
                         <span className="text-slate-300 text-[10px] px-2">-</span>
                       )}
                     </td>
-                    <td className={`px-3 py-2 text-[10px] italic max-w-xs truncate ${isActive ? 'text-indigo-600' : 'text-slate-500'}`} title={item.agentList}>
+                    <td className={`px-3 py-2 text-[10px] italic max-w-xs truncate ${isActive ? 'text-blue-600' : 'text-slate-500'}`} title={item.agentList}>
                       {item.agentList}
                     </td>
                   </tr>
@@ -2785,16 +2793,16 @@ function AdvancedRecurrenceIndex({ data }: { data: CallData[] }) {
   const recurrenceRate = uniqueCallers > 0 ? Math.round((recurringCallers / uniqueCallers) * 100) : 0;
 
   return (
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between h-[200px] group transition-all duration-300 hover:shadow-indigo-500/10">
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between h-[200px] group transition-all duration-300 hover:shadow-blue-500/10">
         {/* Abstract pattern background */}
         <div className="absolute inset-0 opacity-10 pointer-events-none overflow-hidden">
-           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -mr-32 -mt-32" />
+           <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -mr-32 -mt-32" />
            <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl -ml-24 -mb-24" />
         </div>
 
         <div className="relative z-10 flex items-center justify-between">
            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-slate-50 rounded-xl text-indigo-400 border border-slate-100 group-hover:scale-110 transition-transform">
+              <div className="p-2.5 bg-slate-50 rounded-xl text-blue-400 border border-slate-100 group-hover:scale-110 transition-transform">
                  <Users className="h-5 w-5" />
               </div>
               <div>
@@ -2803,7 +2811,7 @@ function AdvancedRecurrenceIndex({ data }: { data: CallData[] }) {
               </div>
            </div>
            {recurrenceRate > 20 && (
-             <div className="bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter border border-indigo-500/10">
+             <div className="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter border border-blue-500/10">
                Relevante
              </div>
            )}
@@ -2811,7 +2819,7 @@ function AdvancedRecurrenceIndex({ data }: { data: CallData[] }) {
 
         <div className="relative z-10 flex flex-col items-center justify-center flex-1 my-2">
             <span className="text-5xl font-black text-slate-900 tracking-tighter leading-none group-hover:scale-105 transition-transform duration-500">{recurrenceRate}%</span>
-            <div className="h-1 w-12 bg-indigo-500 rounded-full mt-3 opacity-50" />
+            <div className="h-1 w-12 bg-blue-500 rounded-full mt-3 opacity-50" />
         </div>
 
         <div className="relative z-10 flex items-end justify-between pt-3 border-t border-slate-100">
@@ -2822,7 +2830,7 @@ function AdvancedRecurrenceIndex({ data }: { data: CallData[] }) {
           
           <div className="flex gap-1 items-end h-6">
             {[30, 60, 45, 90, 55].map((h, i) => (
-              <div key={i} className={`w-1 rounded-full bg-indigo-500/20`} style={{ height: `${h}%` }} />
+              <div key={i} className={`w-1 rounded-full bg-blue-500/20`} style={{ height: `${h}%` }} />
             ))}
           </div>
         </div>
@@ -2952,128 +2960,141 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
 
   return (
     <>
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col h-[424px]">
-      {/* Header */}
-      <div className="flex flex-col gap-3 mb-6 relative">
-        <div className="flex items-center justify-between">
-          <div className="w-8" /> {/* Spacer */}
-          <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight text-center">Produtividade</h3>
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col h-[424px] group transition-all duration-300 hover:shadow-blue-500/11">
+      {/* Header Section */}
+      <div className="flex flex-col items-center gap-4 mb-6 relative">
+        <div className="w-full flex items-center justify-between">
+          <div className="w-10" />
+          <h3 className="text-sm font-black text-slate-800 uppercase tracking-[0.3em] text-center">Produtividade</h3>
           <button 
             onClick={() => setIsModalOpen(true)}
-            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-neutral-50 rounded-xl transition-all"
             title="Expandir visualização"
           >
-            <Maximize2 className="h-4 w-4" />
+            <Maximize2 className="h-5 w-5" />
           </button>
         </div>
-        
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-200 relative">
+
+        {/* Controls Row */}
+        <div className="flex items-center justify-center gap-2 w-full">
+          {/* Month Selector */}
+          <div className="flex items-center gap-0.5 bg-slate-100/50 p-1 rounded-xl border border-slate-200">
             <button 
               onClick={handlePrevMonth}
-              className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm rounded-md transition-all shrink-0"
+              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-white hover:shadow-sm rounded-lg transition-all shrink-0"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-3.5 w-3.5" />
             </button>
-            
             <button 
               onClick={() => setIsDatePopupOpen(!isDatePopupOpen)}
-              className="px-3 py-1 text-[10px] font-black text-slate-700 uppercase tracking-tighter hover:bg-white hover:shadow-sm rounded-md transition-all whitespace-nowrap min-w-[100px] text-center"
+              className="px-2 py-0.5 text-[10px] font-black text-slate-700 uppercase tracking-widest min-w-[100px] text-center"
             >
               {monthNames[selectedMonth]} {selectedYear}
             </button>
-
             <button 
               onClick={handleNextMonth}
-              className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm rounded-md transition-all shrink-0"
+              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-white hover:shadow-sm rounded-lg transition-all shrink-0"
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-3.5 w-3.5" />
             </button>
-
-            {/* Date Quick Selector Popup */}
-            <AnimatePresence>
-              {isDatePopupOpen && (
-                <motion.div 
-                  ref={datePopupRef}
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute top-full left-0 mt-2 z-50 bg-white rounded-xl shadow-xl border border-slate-200 p-4 w-[240px]"
-                >
-                  <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-50">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Escolha Rápida</span>
-                    <div className="flex items-center gap-2">
-                       <button onClick={() => setSelectedYear(selectedYear - 1)} className="p-1 hover:bg-slate-100 rounded transition-colors"><ChevronLeft className="h-3 w-3" /></button>
-                       <span className="text-xs font-black text-slate-900">{selectedYear}</span>
-                       <button onClick={() => setSelectedYear(selectedYear + 1)} className="p-1 hover:bg-slate-100 rounded transition-colors"><ChevronRight className="h-3 w-3" /></button>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1">
-                    {monthNames.map((m, i) => (
-                      <button
-                        key={i}
-                        onClick={() => {
-                          setSelectedMonth(i);
-                          setIsDatePopupOpen(false);
-                        }}
-                        className={`py-2 text-[9px] font-bold rounded-lg transition-all ${selectedMonth === i ? 'bg-indigo-600 text-white shadow-md shadow-indigo-100' : 'text-slate-500 hover:bg-slate-50'}`}
-                      >
-                        {m.substring(0, 3)}
-                      </button>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
 
+          {/* Team Selector */}
           <select 
             value={selectedAgent} 
             onChange={(e) => setSelectedAgent(e.target.value)}
-            className="text-[10px] font-bold bg-slate-50 border border-slate-200 rounded px-2 py-1 outline-none max-w-[140px] truncate shrink-0 hover:border-indigo-300 transition-colors cursor-pointer"
+            className="text-[10px] font-black bg-slate-100/50 border border-slate-200 rounded-xl px-3 py-1.5 outline-none hover:border-blue-300 transition-all cursor-pointer text-slate-600 appearance-none text-center uppercase tracking-tighter min-w-[110px]"
           >
             {agents.map(a => <option key={a} value={a}>{formatAgentName(a)}</option>)}
           </select>
         </div>
       </div>
 
-      {/* Week Header */}
-      <div className="grid grid-cols-[60px_repeat(7,1fr)] gap-1 mb-1">
-        <div />
-        {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (
-          <div key={i} className="text-center text-[10px] font-black text-slate-400">{d}</div>
-        ))}
-      </div>
-
-      {/* Grid */}
-      <div className="flex flex-col gap-1">
-        {weeks.map((week, wIdx) => (
-          <div key={wIdx} className="grid grid-cols-[60px_repeat(7,1fr)] gap-1 items-center min-h-[40px]">
-            <div className="text-[9px] font-black text-slate-400 uppercase whitespace-nowrap">{wIdx + 1}ª Sem</div>
-            {week.map((day, dIdx) => {
-              const key = day ? format(day, 'yyyy-MM-dd') : null;
-              const count = key ? calendarData.stats[key] || 0 : 0;
-              return (
-                <div 
-                  key={dIdx}
-                  className={`aspect-square rounded-md border relative transition-all ${day ? getColor(count) : 'bg-transparent border-transparent'}`}
-                  title={day ? `${format(day, 'dd/MM')}: ${count} chamadas` : ''}
-                >
-                  {day && (
-                    <span className="absolute top-1 left-1 text-[7px] leading-none opacity-50 font-bold select-none">
-                      {day.getDate()}
-                    </span>
-                  )}
-                  {day && count > 0 && (
-                    <div className="flex items-center justify-center w-full h-full">
-                      <span className="text-[11px] font-black">{count}</span>
-                    </div>
-                  )}
+      {/* Main Content Area: Legend (Left) + Grid (Right) */}
+      <div className="flex-1 flex items-stretch gap-6 overflow-hidden">
+        {/* Legend Column (Left) */}
+        <div className="flex flex-col justify-center gap-4 py-2 border-r border-slate-50 pr-6 shrink-0">
+          <div className="flex flex-col gap-3">
+             <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded bg-slate-50 border border-slate-100 shadow-sm" />
+                  <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Vazio</span>
                 </div>
-              );
-            })}
+             </div>
+             <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded bg-red-50 border border-red-100 shadow-sm" />
+                  <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">1 - 5</span>
+                </div>
+             </div>
+             <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded bg-orange-50 border border-orange-100 shadow-sm" />
+                  <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">6 - 10</span>
+                </div>
+             </div>
+             <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded bg-yellow-50 border border-yellow-100 shadow-sm" />
+                  <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">11 - 15</span>
+                </div>
+             </div>
+             <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded bg-emerald-100 border border-emerald-200 shadow-sm" />
+                  <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">16 - 30</span>
+                </div>
+             </div>
+             <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded bg-emerald-400 border border-emerald-500 shadow-sm" />
+                  <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">31+</span>
+                </div>
+             </div>
           </div>
-        ))}
+        </div>
+
+        {/* Unified Grid Container (Right) */}
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="w-full max-w-[420px]">
+            {/* Weekday Header */}
+            <div className="grid grid-cols-[65px_repeat(7,1fr)] gap-2 mb-3">
+              <div />
+              {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map((d, j) => (
+                <div key={j} className="text-center text-[10px] font-black text-slate-300 uppercase tracking-widest">{d.charAt(0)}</div>
+              ))}
+            </div>
+
+            {/* Weeks Grid */}
+            <div className="flex flex-col gap-2">
+              {weeks.map((week, wIdx) => (
+                <div key={wIdx} className="grid grid-cols-[65px_repeat(7,1fr)] gap-2 items-center">
+                  <div className="text-[10px] font-black text-slate-300 uppercase tracking-tighter leading-none">{wIdx + 1}ª Semana</div>
+                  {week.map((day, dIdx) => {
+                    const key = day ? format(day, 'yyyy-MM-dd') : null;
+                    const count = key ? calendarData.stats[key] || 0 : 0;
+                    return (
+                      <div 
+                        key={dIdx}
+                        className={`aspect-square rounded-xl border relative transition-all duration-300 flex items-center justify-center ${day ? getColor(count) : 'bg-transparent border-transparent'}`}
+                        title={day ? `${format(day, 'dd/MM')}: ${count} chamadas` : ''}
+                      >
+                        {day && (
+                          <span className={`absolute top-1 left-1.5 text-[9px] font-bold select-none ${count > 30 ? 'text-white/70' : 'text-slate-400/60'}`}>
+                            {day.getDate()}
+                          </span>
+                        )}
+                        {day && count > 0 && (
+                          <span className="text-[13px] font-black tracking-tighter leading-none">{count}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -3098,7 +3119,7 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/50">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-indigo-600 rounded-xl shadow-md shadow-indigo-100">
+                <div className="p-2.5 bg-blue-600 rounded-xl shadow-md shadow-blue-100">
                   <CalendarIcon className="h-5 w-5 text-white" />
                 </div>
                 <div>
@@ -3138,7 +3159,7 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
                     <div className="flex items-center gap-1 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm relative">
                       <button 
                         onClick={handlePrevMonth}
-                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition-all shrink-0"
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-50 rounded-lg transition-all shrink-0"
                       >
                         <ChevronLeft className="h-5 w-5" />
                       </button>
@@ -3152,7 +3173,7 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
 
                       <button 
                         onClick={handleNextMonth}
-                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition-all shrink-0"
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-50 rounded-lg transition-all shrink-0"
                       >
                         <ChevronRight className="h-5 w-5" />
                       </button>
@@ -3183,7 +3204,7 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
                                     setSelectedMonth(i);
                                     setIsModalDatePopupOpen(false);
                                   }}
-                                  className={`py-3 text-[10px] font-black rounded-xl transition-all uppercase tracking-tighter ${selectedMonth === i ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-500 hover:bg-slate-50'}`}
+                                  className={`py-3 text-[10px] font-black rounded-xl transition-all uppercase tracking-tighter ${selectedMonth === i ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-500 hover:bg-slate-50'}`}
                                 >
                                   {m.substring(0, 3)}
                                 </button>
@@ -3201,7 +3222,7 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
                   <select 
                     value={selectedAgent} 
                     onChange={(e) => setSelectedAgent(e.target.value)}
-                    className="text-sm font-bold bg-white border border-slate-200 rounded-xl px-5 py-2.5 outline-none min-w-[240px] hover:border-indigo-300 transition-all cursor-pointer shadow-sm"
+                    className="text-sm font-bold bg-white border border-slate-200 rounded-xl px-5 py-2.5 outline-none min-w-[240px] hover:border-blue-300 transition-all cursor-pointer shadow-sm"
                   >
                     {agents.map(a => <option key={a} value={a}>{formatAgentName(a)}</option>)}
                   </select>
@@ -3231,14 +3252,14 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
                           .filter(c => c !== null);
                         handleCopy(counts.join(', '), `${wIdx + 1}ª Semana`);
                       }}
-                      className="flex flex-col items-center justify-center bg-white hover:bg-indigo-50 rounded-2xl border border-slate-200 p-2 transition-all group relative overflow-hidden"
+                      className="flex flex-col items-center justify-center bg-white hover:bg-blue-50 rounded-2xl border border-slate-200 p-2 transition-all group relative overflow-hidden"
                       title="Clique para copiar todos os números desta semana"
                     >
-                      <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <span className="text-[9px] font-black text-slate-400 group-hover:text-indigo-600 uppercase tracking-tighter text-center leading-tight">
+                      <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <span className="text-[9px] font-black text-slate-400 group-hover:text-blue-600 uppercase tracking-tighter text-center leading-tight">
                         {wIdx + 1}ª<br/>Semana
                       </span>
-                      <Copy className="h-3 w-3 mt-1.5 opacity-0 group-hover:opacity-100 transition-all text-indigo-400" />
+                      <Copy className="h-3 w-3 mt-1.5 opacity-0 group-hover:opacity-100 transition-all text-blue-400" />
                     </button>
                     {week.map((day, dIdx) => {
                       const key = day ? format(day, 'yyyy-MM-dd') : null;
@@ -3416,7 +3437,7 @@ function AgentPerformanceSummary({ data }: { data: CallData[] }) {
               className="px-3 py-2 font-medium cursor-pointer hover:bg-slate-100 transition-colors text-center"
               onClick={() => handleSort('atendidasGoTo')}
             >
-              <div className="flex items-center justify-center gap-1 text-indigo-600">GoTo <ArrowUpDown className="h-3 w-3" /></div>
+              <div className="flex items-center justify-center gap-1 text-blue-600">GoTo <ArrowUpDown className="h-3 w-3" /></div>
             </th>
             <th 
               className="px-3 py-2 font-medium cursor-pointer hover:bg-slate-100 transition-colors text-center"
@@ -3451,8 +3472,8 @@ function AgentPerformanceSummary({ data }: { data: CallData[] }) {
             sortedSummary.map((item, idx) => (
               <tr key={idx} className="hover:bg-slate-50 transition-colors">
                 <td className="px-3 py-2 font-medium text-[11px] text-slate-900">{formatAgentName(item.name)}</td>
-                <td className="px-3 py-2 text-[11px] font-mono text-indigo-900 text-center font-bold bg-slate-50/50">{item.atendidas}</td>
-                <td className="px-3 py-2 text-[11px] font-mono text-indigo-600 text-center">{item.atendidasGoTo}</td>
+                <td className="px-3 py-2 text-[11px] font-mono text-blue-900 text-center font-bold bg-slate-50/50">{item.atendidas}</td>
+                <td className="px-3 py-2 text-[11px] font-mono text-blue-600 text-center">{item.atendidasGoTo}</td>
                 <td className="px-3 py-2 text-[11px] font-mono text-emerald-600 text-center">{item.atendidasChat}</td>
                 <td className="px-3 py-2 text-[11px] font-mono text-center">
                   <CustomTooltip title="Métricas de Atendimento (SLA)" items={SLA_METRICS}>
@@ -3474,6 +3495,216 @@ function AgentPerformanceSummary({ data }: { data: CallData[] }) {
           )}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function MonthlyResultCard({ data }: { data: CallData[] }) {
+  const [selectedTeam, setSelectedTeam] = useState('Cart. A+B');
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState('Todos');
+
+  // Calculate default year from data
+  const defaultYear = useMemo(() => {
+    if (data.length === 0) return new Date().getFullYear();
+    const counts: Record<number, number> = {};
+    data.forEach(d => {
+      const y = d.startTime.getFullYear();
+      if (!isNaN(y)) counts[y] = (counts[y] || 0) + 1;
+    });
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    return sorted.length > 0 ? parseInt(sorted[0][0]) : new Date().getFullYear();
+  }, [data]);
+
+  const [selectedYear, setSelectedYear] = useState(defaultYear);
+
+  // Sync selectedYear when data loads/initial year is determined
+  useEffect(() => {
+    setSelectedYear(defaultYear);
+  }, [defaultYear]);
+
+  const timeSlots = SERVICE_SCHEDULES;
+  
+  const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+  const fullMonthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+  const stats = useMemo(() => {
+    const filteredByTime = data.filter(d => {
+      if (selectedTimeSlot === 'Todos') return true;
+      return d._schedule === selectedTimeSlot;
+    });
+
+    const teamData = filteredByTime.filter(d => {
+      if (selectedTeam === 'Todos') return true;
+      if (selectedTeam === 'N1') return d._team === 'Cart. A+B' || d._team === 'Cart. C+D+E' || d._team === 'N1';
+      return d._team === selectedTeam;
+    });
+
+    const monthly = fullMonthNames.map((_, index) => {
+      const monthStart = new Date(selectedYear, index, 1);
+      const monthEnd = endOfMonth(monthStart);
+      const callsInMonth = teamData.filter(d => d.startTime >= monthStart && d.startTime <= monthEnd);
+      
+      const chat = callsInMonth.filter(d => d.origin === 'Chat' && d.leftQueueReason === 'answered').length;
+      const calls = callsInMonth.filter(d => d.origin === 'GoTo' && d.leftQueueReason === 'answered').length;
+      const totalHandle = chat + calls;
+      const perdidas = callsInMonth.filter(d => d.leftQueueReason === 'abandon').length;
+      
+      const techSet = new Set(callsInMonth.filter(d => d.agentName && d.agentName !== 'Ligações Perdidas').map(d => d.agentName));
+      const qtdTecnicos = techSet.size;
+      const media = qtdTecnicos > 0 ? parseFloat((totalHandle / qtdTecnicos).toFixed(1)) : 0;
+      
+      return { month: index, chat, calls, totalHandle, perdidas, media, qtdTecnicos, techs: Array.from(techSet) };
+    });
+
+    const yearlyTechSet = new Set<string>();
+    monthly.forEach(m => m.techs.forEach(t => yearlyTechSet.add(t)));
+    const totalTechsYear = yearlyTechSet.size;
+
+    const totals = monthly.reduce((acc, curr) => ({
+      chat: acc.chat + curr.chat,
+      calls: acc.calls + curr.calls,
+      totalHandle: acc.totalHandle + curr.totalHandle,
+      perdidas: acc.perdidas + curr.perdidas,
+      qtdTecnicos: totalTechsYear,
+      media: totalTechsYear > 0 ? parseFloat(((acc.totalHandle + curr.totalHandle) / totalTechsYear).toFixed(1)) : 0
+    }), { chat: 0, calls: 0, totalHandle: 0, perdidas: 0, qtdTecnicos: 0, media: 0 });
+
+    const monthsWithData = monthly.filter(m => m.totalHandle > 0 || m.perdidas > 0).length;
+    const finalAvg = monthsWithData > 0 ? {
+       chat: parseFloat((totals.chat / monthsWithData).toFixed(0)),
+       calls: parseFloat((totals.calls / monthsWithData).toFixed(0)),
+       totalHandle: parseFloat((totals.totalHandle / monthsWithData).toFixed(0)),
+       perdidas: parseFloat((totals.perdidas / monthsWithData).toFixed(0)),
+       qtdTecnicos: parseFloat((monthly.reduce((a,c) => a+c.qtdTecnicos, 0) / monthsWithData).toFixed(1)),
+       finalAvgValue: parseFloat((monthly.reduce((a,c) => a+c.media, 0) / monthsWithData).toFixed(1))
+    } : { chat: 0, calls: 0, totalHandle: 0, perdidas: 0, qtdTecnicos: 0, finalAvgValue: 0 };
+
+    return { monthly, totals, avg: finalAvg };
+  }, [data, selectedTeam, selectedYear, selectedTimeSlot]);
+
+  const maxVal = useMemo(() => {
+    return Math.max(...stats.monthly.map(m => Math.max(m.chat, m.calls, m.totalHandle, m.perdidas)), 1);
+  }, [stats]);
+
+  const renderRow = (label: string, key: string, barColor: string, isFloat = false) => {
+    const values = stats.monthly.map(m => (m as any)[key]);
+    const total = (stats.totals as any)[key];
+    const avg = key === 'media' ? stats.avg.finalAvgValue : (stats.avg as any)[key];
+
+    return (
+      <tr className="hover:bg-slate-50 transition-colors">
+        <td className="p-2 border-b border-r border-slate-100 font-bold text-slate-700 sticky left-0 bg-white z-10 w-24 text-[10px] uppercase tracking-tighter">{label}</td>
+        {values.map((v, i) => (
+          <td key={i} className="p-1 border-b border-r border-slate-50 text-center relative min-w-[45px]">
+            <div className={`relative z-10 font-bold ${v === 0 ? 'text-slate-200' : 'text-slate-700'}`}>
+              {isFloat ? v.toFixed(1).replace('.', ',') : v}
+            </div>
+            {v > 0 && key !== 'media' && key !== 'qtdTecnicos' && (
+              <div 
+                className={`absolute bottom-0 left-0 h-1.5 ${barColor} opacity-20 rounded-t-sm`} 
+                style={{ width: `${Math.min((v / maxVal) * 100, 100)}%` }}
+              />
+            )}
+          </td>
+        ))}
+        <td className="p-2 border-b border-r border-slate-100 text-center font-black text-blue-600 bg-blue-50/30">
+          {isFloat ? String(total.toFixed(0)) : total}
+        </td>
+        <td className="p-2 border-b border-slate-100 text-center font-black text-blue-600 bg-blue-50/30">
+          {isFloat ? avg.toFixed(1).replace('.', ',') : avg}
+        </td>
+      </tr>
+    );
+  };
+
+  const teams = useMemo(() => {
+    const s = new Set(data.map(d => d._team).filter(Boolean));
+    const list = Array.from(s).sort();
+    if (!list.includes('Cart. A+B')) list.unshift('Cart. A+B');
+    if (!list.includes('Todos')) list.unshift('Todos');
+    return list;
+  }, [data]);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col h-[424px] overflow-hidden group transition-all duration-300 hover:shadow-blue-500/10">
+      <div className="flex flex-col gap-4 mb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-slate-50 rounded-xl text-blue-400 border border-slate-100 group-hover:scale-110 transition-transform">
+              <BarChart2 className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Resultado Mensal</h3>
+              <div className="flex items-center gap-2 mt-1">
+                <button 
+                  onClick={() => setSelectedYear(prev => prev - 1)}
+                  className="p-1 hover:bg-slate-100 rounded transition-colors text-slate-400 hover:text-slate-600"
+                >
+                  <ChevronLeft className="h-3 w-3" />
+                </button>
+                <p className="text-[8px] text-slate-500 uppercase font-black">Acumulado {selectedYear}</p>
+                <button 
+                  onClick={() => setSelectedYear(prev => prev + 1)}
+                  className="p-1 hover:bg-slate-100 rounded transition-colors text-slate-400 hover:text-slate-600"
+                >
+                  <ChevronRight className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <select 
+              value={selectedTimeSlot} 
+              onChange={(e) => setSelectedTimeSlot(e.target.value)}
+              className="text-[10px] font-black bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 outline-none hover:border-blue-300 transition-all cursor-pointer uppercase tracking-tighter text-slate-600"
+            >
+              {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <select 
+              value={selectedTeam} 
+              onChange={(e) => setSelectedTeam(e.target.value)}
+              className="text-[10px] font-black bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 outline-none hover:border-blue-300 transition-all cursor-pointer uppercase tracking-tighter text-slate-600"
+            >
+              {teams.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto custom-scrollbar">
+        <table className="w-full text-left border-separate border-spacing-0">
+          <thead className="sticky top-0 z-20">
+            <tr className="bg-slate-50">
+              <th className="p-2 border-b border-r border-slate-200 text-[9px] font-black text-slate-400 uppercase tracking-widest sticky left-0 bg-slate-50 z-30">Mês</th>
+              {monthNames.map(m => (
+                <th key={m} className="p-2 border-b border-r border-slate-200 text-center text-[9px] font-black text-slate-400 uppercase tracking-widest min-w-[45px]">
+                  {m}
+                </th>
+              ))}
+              <th className="p-2 border-b border-r border-slate-200 text-center text-[9px] font-black text-blue-500 uppercase tracking-widest bg-blue-50/50">Total</th>
+              <th className="p-2 border-b border-slate-200 text-center text-[9px] font-black text-blue-500 uppercase tracking-widest bg-blue-50/50">Média</th>
+            </tr>
+          </thead>
+          <tbody className="text-[10px]">
+            {renderRow('Chat', 'chat', 'bg-blue-400')}
+            {renderRow('Ligação', 'calls', 'bg-emerald-400')}
+            {renderRow('Atendimento', 'totalHandle', 'bg-blue-500')}
+            {renderRow('Perdidas', 'perdidas', 'bg-rose-400')}
+            <tr><td colSpan={15} className="h-4 border-b border-slate-50 bg-slate-50/30"></td></tr>
+            {renderRow('Técnicos', 'qtdTecnicos', 'bg-slate-500', true)}
+            {renderRow('Média/Tec', 'media', 'bg-amber-400', true)}
+          </tbody>
+        </table>
+      </div>
+      
+      <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between text-[8px] font-black text-slate-400 uppercase tracking-widest">
+         <span>Performance MoM</span>
+         <div className="flex gap-4">
+            <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-blue-400" /> Chat</div>
+            <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Voz</div>
+            <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Total</div>
+         </div>
+      </div>
     </div>
   );
 }
@@ -3614,12 +3845,12 @@ function LogsTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
       >
         <div className="flex items-center justify-between gap-1.5">
           <div 
-            className="flex items-center gap-1.5 cursor-pointer hover:text-indigo-600 transition-colors select-none flex-1 truncate"
+            className="flex items-center gap-1.5 cursor-pointer hover:text-blue-600 transition-colors select-none flex-1 truncate"
             onClick={() => handleSort(colKey)}
           >
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider truncate">{label}</span>
             {sortCol === colKey && (
-              sortDesc ? <ChevronDown className="h-3 w-3 text-indigo-500 shrink-0" /> : <ChevronUp className="h-3 w-3 text-indigo-500 shrink-0" />
+              sortDesc ? <ChevronDown className="h-3 w-3 text-blue-500 shrink-0" /> : <ChevronUp className="h-3 w-3 text-blue-500 shrink-0" />
             )}
           </div>
           <div className="relative shrink-0">
@@ -3742,7 +3973,7 @@ function LogsTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
                     <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border ${
                       call.origin === 'Chat' ? 'bg-teal-50 text-teal-700 border-teal-100' :
                       call.origin === 'GoTo' ? 'bg-orange-50 text-orange-700 border-orange-100' :
-                      'bg-indigo-50 text-indigo-700 border-indigo-100'
+                      'bg-blue-50 text-blue-700 border-blue-100'
                     }`}>
                       {call.origin}
                     </span>
@@ -3759,7 +3990,7 @@ function LogsTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
                   <td className="p-4 whitespace-nowrap font-mono text-slate-500">
                     {format(endTime, 'HH:mm:ss')}
                   </td>
-                  <td className="p-4 font-mono text-indigo-700 font-bold">
+                  <td className="p-4 font-mono text-blue-700 font-bold">
                     {formatSeconds(call.talkDuration)}
                   </td>
                   <td className="p-4 font-mono text-slate-500">
@@ -3987,12 +4218,12 @@ function DataTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
       >
         <div className="flex items-center justify-between gap-1.5">
           <div 
-            className={`flex items-center gap-1.5 cursor-pointer hover:text-indigo-600 transition-colors select-none flex-1 truncate text-${align}`}
+            className={`flex items-center gap-1.5 cursor-pointer hover:text-blue-600 transition-colors select-none flex-1 truncate text-${align}`}
             onClick={() => handleSort(colKey)}
           >
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider truncate">{label}</span>
             {sortCol === colKey && (
-              sortDesc ? <ChevronDown className="h-3 w-3 text-indigo-500 shrink-0" /> : <ChevronUp className="h-3 w-3 text-indigo-500 shrink-0" />
+              sortDesc ? <ChevronDown className="h-3 w-3 text-blue-500 shrink-0" /> : <ChevronUp className="h-3 w-3 text-blue-500 shrink-0" />
             )}
           </div>
           <div className="relative shrink-0">
@@ -4196,7 +4427,7 @@ function DataTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
                 <td className="p-4 text-slate-600 whitespace-nowrap">{formatCellDate(call.slaN2FirstEntry)}</td>
                 <td className="p-4 text-slate-600 whitespace-nowrap">{formatCellDate(call.slaN2FirstExit)}</td>
                 <td className="p-4 text-slate-600 font-bold tabular-nums">{call.firstResponseTime || '-'}</td>
-                <td className="p-4 text-indigo-700 font-black tabular-nums whitespace-nowrap">{call.totalLifeTime || '-'}</td>
+                <td className="p-4 text-blue-700 font-black tabular-nums whitespace-nowrap">{call.totalLifeTime || '-'}</td>
               </tr>
             )})}
           </tbody>
@@ -4446,7 +4677,7 @@ const AnalysisOfTicketsView = memo(({ data, allUniqueValues }: { data: CallData[
           <div className="lg:col-span-3">
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px]">
               <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
                   <ListTree className="h-5 w-5" />
                 </div>
                 <div>
@@ -4464,7 +4695,7 @@ const AnalysisOfTicketsView = memo(({ data, allUniqueValues }: { data: CallData[
                       cursor={{ fill: '#f8fafc' }}
                       contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                     />
-                    <Bar dataKey="value" fill="#6366f1" radius={[6, 6, 0, 0]} barSize={40} className="cursor-pointer hover:opacity-80 transition-opacity" />
+                    <Bar dataKey="value" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={40} className="cursor-pointer hover:opacity-80 transition-opacity" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -4486,7 +4717,7 @@ const AnalysisOfTicketsView = memo(({ data, allUniqueValues }: { data: CallData[
               label="Tempo de Resposta N2" 
               value={formatToHMM(avgRespN2)} 
               icon={Timer} 
-              color="text-indigo-600"
+              color="text-blue-600"
               subtitle="Média de espera"
               trendValue="Estável"
             />
@@ -4571,7 +4802,7 @@ function RankingDeRecorrencia({ data, ticketsAnalisados, onViewDetail }: { data:
         </div>
         <button 
           onClick={() => onViewDetail(ranking[0]?.name || '')}
-          className="flex items-center gap-2 px-6 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-widest hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all group"
+          className="flex items-center gap-2 px-6 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-widest hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all group"
         >
           <TrendingUp className="h-3 w-3 group-hover:scale-110 transition-transform" />
           VER TICKETS
@@ -4591,8 +4822,8 @@ function RankingDeRecorrencia({ data, ticketsAnalisados, onViewDetail }: { data:
                    <span className="text-sm font-black text-slate-800 leading-none">{item.value}</span>
                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">Tickets</span>
                 </div>
-                <span className="text-sm font-black text-indigo-600 min-w-[40px] text-right">{item.percentage}%</span>
-                <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-indigo-400 transition-colors" />
+                <span className="text-sm font-black text-blue-600 min-w-[40px] text-right">{item.percentage}%</span>
+                <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-blue-400 transition-colors" />
               </div>
             </div>
             <div className="w-full h-2 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
@@ -4600,7 +4831,7 @@ function RankingDeRecorrencia({ data, ticketsAnalisados, onViewDetail }: { data:
                 initial={{ width: 0 }}
                 animate={{ width: `${item.percentage}%` }}
                 transition={{ duration: 1, ease: 'easeOut', delay: idx * 0.1 }}
-                className="h-full bg-indigo-500 rounded-full"
+                className="h-full bg-blue-500 rounded-full"
               />
             </div>
           </div>
@@ -4922,7 +5153,7 @@ function TicketDetailsModal({ isOpen, onClose, queueName, tickets, allUniqueValu
             {/* Header */}
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-100">
+                <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-100">
                   <ListTree className="h-6 w-6 text-white" />
                 </div>
                 <div>
