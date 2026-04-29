@@ -179,6 +179,7 @@ const TableFilterDropdown = ({
       className={`fixed mt-2 w-64 bg-white border border-slate-200 shadow-xl rounded-2xl z-[9999] flex flex-col p-2 overflow-hidden animate-in fade-in zoom-in duration-150`}
       style={{ top: coords.top, left: coords.left }}
       onClick={e => e.stopPropagation()}
+      onMouseDown={e => e.stopPropagation()}
     >
       <div className="p-2 border-b border-slate-100 mb-2">
         <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-full border border-slate-200 focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all">
