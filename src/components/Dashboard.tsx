@@ -108,18 +108,20 @@ const TableFilterDropdown = ({
   options, 
   selectedValues, 
   onToggle, 
-  onClose 
+  onClose,
+  align = 'left'
 }: { 
   options: string[], 
   selectedValues: string[], 
   onToggle: (val: string) => void, 
-  onClose: () => void 
+  onClose: () => void,
+  align?: 'left' | 'right'
 }) => {
   const [search, setSearch] = useState('');
   const filtered = options.filter(o => o.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="absolute top-full mt-2 left-0 w-64 bg-white border border-slate-200 shadow-xl rounded-2xl z-50 flex flex-col p-2 overflow-hidden" onClick={e => e.stopPropagation()}>
+    <div className={`absolute top-full mt-2 ${align === 'right' ? 'right-0' : 'left-0'} w-64 bg-white border border-slate-200 shadow-xl rounded-2xl z-50 flex flex-col p-2 overflow-hidden`} onClick={e => e.stopPropagation()}>
       <div className="p-2 border-b border-slate-100 mb-2">
         <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-full border border-slate-200 focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all">
           <Search className="h-3.5 w-3.5 text-slate-400" />
@@ -452,7 +454,7 @@ const AtendimentosView = memo(({
   const n1Calls = useMemo(() => viewData.filter(d => N1_AGENTS_LIST.some(ag => d.agentName.includes(ag))), [viewData]);
   const n2Calls = useMemo(() => viewData.filter(d => N2_AGENTS_LIST.some(ag => d.agentName.includes(ag))), [viewData]);
 
-  const n1Answered = useMemo(() => n1Calls.filter(d => d.leftQueueReason === 'answered'), [n1Calls]);
+  const n1Answered = useMemo(() => n1Calls.filter(d => d.leftQueueReason === 'answered' || d.leftQueueReason === 'pendente'), [n1Calls]);
   const n1Total = n1Calls.length;
   const resN1 = n1Total > 0 ? Math.round((n1Answered.length / n1Total) * 100) : 0;
   const escRate = viewData.length > 0 ? Math.round((n2Calls.length / viewData.length) * 100) : 0;
@@ -563,9 +565,9 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
         ...d,
         agentName,
         _status: d.origin === 'Movidesk' ? (d.status || 'Outro') : 
-                 (d.leftQueueReason === 'answered' ? 'Atendida' : 
+                 (d.leftQueueReason === 'answered' || d.leftQueueReason === 'pendente' ? 'Atendida' : 
                   d.leftQueueReason === 'abandon' ? (d.waitTime < 60 ? 'Perdida < 1m' : 'Perdida > 1m') : 
-                  d.leftQueueReason === 'pendente' ? 'Pendente' : 'Outro'),
+                  'Outro'),
         _dateFormatted: isNaN(d.startTime.getTime()) ? '-' : format(d.startTime, 'dd/MM/yyyy'),
         _searchable: `${callerNumber} ${queue} ${agentName.toLowerCase()} ${ticketNumber} ${subject} ${clientName}`,
         _team: getTeamForCall({ ...d, agentName }),
@@ -633,9 +635,11 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
     return result;
   }, [data]);
 
+  const dateRangeInitialized = useRef(false);
   useEffect(() => {
-    if (initialDateRange && !dateRange) {
+    if (initialDateRange && !dateRange && !dateRangeInitialized.current) {
       setDateRange(initialDateRange);
+      dateRangeInitialized.current = true;
     }
   }, [initialDateRange, dateRange]);
 
@@ -952,8 +956,14 @@ export function Dashboard({ data: rawData, view = 'atendimentos' }: DashboardPro
                   mode="range"
                   locale={ptBR}
                   selected={dateRange}
-                  onSelect={(range) => {
-                    setDateRange(range);
+                  onSelect={(range, selectedDay) => {
+                    if (range) {
+                      setDateRange(range);
+                    } else if (selectedDay) {
+                      // Se o range vier undefined, significa que o usuário clicou em uma data já selecionada.
+                      // Forçamos a seleção apenas desta data para permitir filtro de dia único.
+                      setDateRange({ from: selectedDay, to: selectedDay });
+                    }
                   }}
                   className="text-sm"
                   styles={{
@@ -1189,7 +1199,7 @@ function MetricsCards({
   const lostShortWait = abandonedCalls.filter(d => d.waitTime < 60);
   
   const pendenteCalls = totaisData.filter(d => d.leftQueueReason === 'pendente');
-  const answeredCalls = totaisData.filter(d => d.leftQueueReason === 'answered');
+  const answeredCalls = totaisData.filter(d => d.leftQueueReason === 'answered' || d.leftQueueReason === 'pendente');
 
   const totalCalls = totaisData.length;
   const abandonRate = totalCalls > 0 ? Math.round((abandonedCalls.length / totalCalls) * 100) : 0;
@@ -1203,7 +1213,7 @@ function MetricsCards({
   const answeredRate = totalCalls > 0 ? Math.round((answeredCalls.length / totalCalls) * 100) : 0;
 
   // Variables for Desempenho de atendimento (Gauge)
-  const gaugeAnsweredCalls = cardsData.filter(d => d.leftQueueReason === 'answered');
+  const gaugeAnsweredCalls = cardsData.filter(d => d.leftQueueReason === 'answered' || d.leftQueueReason === 'pendente');
   const totalTalkTime = cardsData.reduce((acc, curr) => acc + curr.talkDuration, 0);
   const avgTalkTime = gaugeAnsweredCalls.length > 0 
     ? Math.round(totalTalkTime / gaugeAnsweredCalls.length)
@@ -1583,9 +1593,7 @@ function ChartCallsOverTime({
         } else {
           acc[key].perdidas += 1;
         }
-      } else if (reason === 'pendente') {
-        acc[key].pendente += 1;
-      } else if (reason === 'answered') {
+      } else if (reason === 'answered' || reason === 'pendente') {
         acc[key].atendidas += 1;
       }
       
@@ -1750,7 +1758,7 @@ function ChartAgentPerformance({
       if (!acc[shortName]) acc[shortName] = { name: shortName, chamadas: 0, abandonos: 0, perdidas_baixo_1m: 0, pendente: 0 };
       
       const reason = call.leftQueueReason?.toLowerCase() || '';
-      if (reason === 'answered') {
+      if (reason === 'answered' || reason === 'pendente') {
         acc[shortName].chamadas += 1;
       } else if (reason === 'abandon') {
         if ((call.waitTime || 0) < 60) {
@@ -1758,8 +1766,6 @@ function ChartAgentPerformance({
         } else {
           acc[shortName].abandonos += 1;
         }
-      } else if (reason === 'pendente') {
-        acc[shortName].pendente += 1;
       }
       return acc;
     }, {} as Record<string, any>);
@@ -1800,8 +1806,7 @@ function ChartAgentPerformance({
       const reason = call.leftQueueReason?.toLowerCase() || '';
       const isShortWait = (call.waitTime || 0) < 60;
       
-      if (reason === 'answered' && !hiddenKeys.includes('chamadas')) return true;
-      if (reason === 'pendente' && !hiddenKeys.includes('pendente')) return true;
+      if ((reason === 'answered' || reason === 'pendente') && !hiddenKeys.includes('chamadas')) return true;
       if (reason === 'abandon') {
         if (isShortWait && !hiddenKeys.includes('perdidas_baixo_1m')) return true;
         if (!isShortWait && !hiddenKeys.includes('abandonos')) return true;
@@ -2340,22 +2345,23 @@ function AgentDetailedProductivityCard({ data }: { data: CallData[] }) {
              }
            }
            
-            const isAbandoned = (d.leftQueueReason?.toLowerCase() === 'abandon' || d.status?.toLowerCase() === 'canceled') && (d.waitTime >= 60); 
+            const isAttended = d.leftQueueReason?.toLowerCase() === 'answered' || d.leftQueueReason?.toLowerCase() === 'pendente';
+            const isLost = (d.leftQueueReason?.toLowerCase() === 'abandon' || d.status?.toLowerCase() === 'canceled' || name === 'Ligações Perdidas') && (d.waitTime >= 60);
 
-            if (isAbandoned || (name === 'Ligações Perdidas' && d.waitTime >= 60)) {
+            if (isAttended) {
+              if (dailyTotals[key]) {
+                if (d.origin === 'Chat') dailyTotals[key].chat += 1;
+                else dailyTotals[key].calls += 1;
+                dailyTotals[key].total += 1;
+
+                if (agents.includes(name)) {
+                  grid[name][key] = (grid[name][key] || 0) + 1;
+                  dailyTotals[key].count += 1;
+                }
+              }
+            } else if (isLost) {
               if (dailyTotals[key]) dailyTotals[key].lost += 1;
-            } else {
-             if (dailyTotals[key]) {
-               if (d.origin === 'Chat') dailyTotals[key].chat += 1;
-               else dailyTotals[key].calls += 1;
-               dailyTotals[key].total += 1;
-
-               if (agents.includes(name)) {
-                 grid[name][key] = (grid[name][key] || 0) + 1;
-                 dailyTotals[key].count += 1;
-               }
-             }
-           }
+            }
          }
        }
      });
@@ -2916,8 +2922,8 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
       const dMonth = d.startTime.getMonth();
       const dYear = d.startTime.getFullYear();
       if (dMonth === selectedMonth && dYear === selectedYear) {
-        // Exclude lost calls (abandon) from productivity count
-        if (d.leftQueueReason?.toLowerCase() === 'abandon') return;
+        // Only count answered or pendente calls for productivity
+        if (d.leftQueueReason?.toLowerCase() !== 'answered' && d.leftQueueReason?.toLowerCase() !== 'pendente') return;
 
         const prettyName = formatAgentName(d.agentName);
         if (selectedAgent === 'Todos' || prettyName === selectedAgent) {
@@ -3365,7 +3371,7 @@ function AgentPerformanceSummary({ data }: { data: CallData[] }) {
       };
       
       const reason = call.leftQueueReason?.toLowerCase() || '';
-      if (reason === 'answered') {
+      if (reason === 'answered' || reason === 'pendente') {
         acc[shortName].atendidas += 1;
         acc[shortName].totalTalkTime += call.talkDuration;
         
@@ -3544,8 +3550,8 @@ function MonthlyResultCard({ data }: { data: CallData[] }) {
       const monthEnd = endOfMonth(monthStart);
       const callsInMonth = teamData.filter(d => d.startTime >= monthStart && d.startTime <= monthEnd);
       
-      const chat = callsInMonth.filter(d => d.origin === 'Chat' && d.leftQueueReason === 'answered').length;
-      const calls = callsInMonth.filter(d => d.origin === 'GoTo' && d.leftQueueReason === 'answered').length;
+      const chat = callsInMonth.filter(d => d.origin === 'Chat' && (d.leftQueueReason === 'answered' || d.leftQueueReason === 'pendente')).length;
+      const calls = callsInMonth.filter(d => d.origin === 'GoTo' && (d.leftQueueReason === 'answered' || d.leftQueueReason === 'pendente')).length;
       const totalHandle = chat + calls;
       const perdidas = callsInMonth.filter(d => d.leftQueueReason === 'abandon').length;
       
@@ -3834,7 +3840,7 @@ function LogsTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
     document.body.removeChild(link);
   };
 
-  const Th = ({ label, colKey, extraClass = "" }: { label: string, colKey: keyof CallData, extraClass?: string }) => {
+  const Th = ({ label, colKey, extraClass = "", filterAlign = "left" }: { label: string, colKey: keyof CallData, extraClass?: string, filterAlign?: "left" | "right" }) => {
     const uniqueValues = allUniqueValues[colKey as string] || [];
     const activeFilters = columnFilters[colKey as string] || [];
     const isFiltered = activeFilters.length > 0;
@@ -3869,6 +3875,7 @@ function LogsTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
                  selectedValues={activeFilters}
                  onToggle={(val) => toggleFilterValue(colKey as string, val)}
                  onClose={() => setFilterDropdownOpen(null)}
+                 align={filterAlign}
                />
              )}
           </div>
@@ -3917,9 +3924,9 @@ function LogsTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
               <Th label="Hora Fim" colKey="startTime" />
               <Th label="Conversa" colKey="talkDuration" />
               <Th label="Telefone" colKey="callerNumber" />
-              <Th label="Operador" colKey="agentName" />
-              <Th label="Fila" colKey="queue" />
-              <Th label="Status" colKey="leftQueueReason" />
+              <Th label="Operador" colKey="agentName" filterAlign="right" />
+              <Th label="Fila" colKey="queue" filterAlign="right" />
+              <Th label="Status" colKey="leftQueueReason" filterAlign="right" />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-[11px]">
@@ -4207,7 +4214,7 @@ function DataTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
     document.body.removeChild(link);
   };
 
-  const Th = ({ label, colKey, align = "left", extraClass = "" }: { label: string, colKey: keyof CallData, align?: "left" | "center" | "right", extraClass?: string }) => {
+  const Th = ({ label, colKey, align = "left", extraClass = "", filterAlign = "left" }: { label: string, colKey: keyof CallData, align?: "left" | "center" | "right", extraClass?: string, filterAlign?: "left" | "right" }) => {
     const uniqueValues = allUniqueValues[colKey as string] || [];
     const activeFilters = columnFilters[colKey as string] || [];
     const isFiltered = activeFilters.length > 0;
@@ -4242,6 +4249,7 @@ function DataTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
                  selectedValues={activeFilters}
                  onToggle={(val) => toggleFilterValue(colKey as string, val)}
                  onClose={() => setFilterDropdownOpen(null)}
+                 align={filterAlign}
                />
              )}
           </div>
@@ -4255,9 +4263,9 @@ function DataTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
     const s = status.toLowerCase();
     let config = { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200' };
     
-    if (s.includes('resolvido') || s.includes('finalizado') || s === 'answered') {
+    if (s.includes('resolvido') || s.includes('finalizado') || s === 'answered' || s === 'pendente') {
       config = { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' };
-    } else if (s.includes('novo') || s === 'pendente') {
+    } else if (s.includes('novo')) {
       config = { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' };
     } else if (s.includes('cancelado') || s === 'abandon') {
       config = { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200' };
@@ -4267,7 +4275,7 @@ function DataTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
 
     return (
       <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border ${config.bg} ${config.text} ${config.border} whitespace-nowrap`}>
-        {status === 'answered' ? 'Atendida' : status === 'abandon' ? 'Perdida' : status}
+        {status === 'answered' || status === 'pendente' ? 'Atendida' : status === 'abandon' ? 'Perdida' : status}
       </span>
     );
   };
@@ -4345,16 +4353,16 @@ function DataTable({ data, allUniqueValues }: { data: CallData[], allUniqueValue
               <Th label="Status" colKey="status" />
               <Th label="Assunto" colKey="subject" />
               <Th label="Descrição do Ticket" colKey="description" />
-              <Th label="Urgência" colKey="urgency" />
-              <Th label="Tags" colKey="tags" />
-              <Th label="Cliente (Completo)" colKey="clientName" />
-              <Th label="Cliente: CPF / CNPJ (Pessoa)" colKey="cnpj" />
-              <Th label="Serviço (Completo)" colKey="service" />
-              <Th label="Tipo" colKey="type" />
-              <Th label="SLA N2 - 1ª Entrada" colKey="slaN2FirstEntry" />
-              <Th label="SLA N2 - 1ª Saída" colKey="slaN2FirstExit" />
-              <Th label="1° Resposta (Horas Corridas)" colKey="firstResponseTime" />
-              <Th label="Tempo de vida (Horas corridas)" colKey="totalLifeTime" />
+              <Th label="Urgência" colKey="urgency" filterAlign="right" />
+              <Th label="Tags" colKey="tags" filterAlign="right" />
+              <Th label="Cliente (Completo)" colKey="clientName" filterAlign="right" />
+              <Th label="Cliente: CPF / CNPJ (Pessoa)" colKey="cnpj" filterAlign="right" />
+              <Th label="Serviço (Completo)" colKey="service" filterAlign="right" />
+              <Th label="Tipo" colKey="type" filterAlign="right" />
+              <Th label="SLA N2 - 1ª Entrada" colKey="slaN2FirstEntry" filterAlign="right" />
+              <Th label="SLA N2 - 1ª Saída" colKey="slaN2FirstExit" filterAlign="right" />
+              <Th label="1° Resposta (Horas Corridas)" colKey="firstResponseTime" filterAlign="right" />
+              <Th label="Tempo de vida (Horas corridas)" colKey="totalLifeTime" filterAlign="right" />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-[11px]">
