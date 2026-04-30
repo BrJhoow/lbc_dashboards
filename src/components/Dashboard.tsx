@@ -14,7 +14,7 @@ import {
   Download, UploadCloud, Users, PhoneCall, Clock, PhoneMissed, 
   ArrowUpDown, Search, Filter, Calendar as CalendarIcon, ChevronDown, ChevronUp, Check, X,
   CheckCircle2, Timer, TrendingUp, Thermometer, Maximize2, Copy, ChevronLeft, ChevronRight, BarChart2, ListTree, SlidersHorizontal, AlertCircle,
-  Trophy, Activity, Hash, Info
+  Trophy, Activity, Hash, Info, Ticket
 } from 'lucide-react';
 
 const getLevenshteinDistance = (a: string, b: string): number => {
@@ -3615,7 +3615,7 @@ function MonthlyResultCard({ data }: { data: CallData[] }) {
       const chat = callsInMonth.filter(d => d.origin === 'Chat' && (d.leftQueueReason === 'answered' || d.leftQueueReason === 'pendente')).length;
       const calls = callsInMonth.filter(d => d.origin === 'GoTo' && (d.leftQueueReason === 'answered' || d.leftQueueReason === 'pendente')).length;
       const totalHandle = chat + calls;
-      const perdidas = callsInMonth.filter(d => d.leftQueueReason === 'abandon').length;
+      const perdidas = callsInMonth.filter(d => d.leftQueueReason === 'abandon' && (d.waitTime || 0) >= 60).length;
       
       const techSet = new Set(callsInMonth.filter(d => d.agentName && d.agentName !== 'Ligações Perdidas').map(d => d.agentName));
       const qtdTecnicos = techSet.size;
@@ -4699,34 +4699,16 @@ const AnalysisOfTicketsView = memo(({ data, allUniqueValues }: { data: CallData[
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
-      {/* 1st Row: 4 metrics - Tickets Analisados, Equipes Identificadas, Assunto Principal, Taxa de Resolução */}
+      {/* 1st Row: 4 metrics - Tickets Analisados, Taxa de Resolução N1, Volume de Escalonamento, Tempo de Resposta N2 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricBox 
           label="Tickets Analisados" 
           value={ticketsAnalisados.toString()} 
-          icon={BarChart2} 
+          icon={Ticket} 
           color="text-blue-600"
           subtitle="Total processado"
           trendValue="Volume Global"
         />
-        <MetricBox 
-          label="Equipes Identificadas" 
-          value={uniqueGroups.toString()} 
-          icon={Users} 
-          color="text-blue-700"
-          subtitle="Equipes únicas"
-          trendValue="Classificação"
-        />
-        <div onClick={() => setIsSubjectModalOpen(true)} className="cursor-pointer">
-          <MetricBox 
-            label="Assunto Principal" 
-            value={topSubject} 
-            icon={Search} 
-            color="text-orange-600"
-            subtitle={`${topSubjectPerc} do volume total`}
-            trendValue="Ver Todos"
-          />
-        </div>
         <MetricBox 
           label="Taxa de Resolução no N1" 
           value={`${resN1}%`} 
@@ -4734,6 +4716,22 @@ const AnalysisOfTicketsView = memo(({ data, allUniqueValues }: { data: CallData[
           color="text-emerald-600"
           subtitle="Primeiro contato"
           trendValue="Eficiente"
+        />
+        <MetricBox 
+          label="Volume de Escalonamento" 
+          value={`${escRate}%`} 
+          icon={TrendingUp} 
+          color="text-amber-600"
+          subtitle="N1 para N2"
+          trendValue="Sob controle"
+        />
+        <MetricBox 
+          label="Tempo de Resposta N2" 
+          value={formatToHMM(avgRespN2)} 
+          icon={Timer} 
+          color="text-blue-600"
+          subtitle="Média de espera"
+          trendValue="Estável"
         />
       </div>
 
@@ -4746,62 +4744,51 @@ const AnalysisOfTicketsView = memo(({ data, allUniqueValues }: { data: CallData[
 
       {/* Main Analysis Layout */}
       <div className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Top-Left: Distribuição por Fila */}
-          <div className="lg:col-span-3">
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px]">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                  <ListTree className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Distribuição por Fila</h3>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">Volume de chamados por setor</p>
-                </div>
+        {/* Row 2: 3 metrics - Performance por Tickets, Gargalos por Status, Distribuição por Fila */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <PerformancePorTickets data={data} />
+          <GargalosPorStatus data={data} />
+          {/* Distribuição por Fila moved here */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px]">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                <ListTree className="h-5 w-5" />
               </div>
-              <div className="flex-1 h-0 min-h-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={queueData.slice(0, 8)} onClick={(data) => data && data.activePayload && handleQueueClick(data.activeLabel)}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                    <Tooltip 
-                      cursor={{ fill: '#f8fafc' }}
-                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                    />
-                    <Bar dataKey="value" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={40} className="cursor-pointer hover:opacity-80 transition-opacity" />
-                  </BarChart>
-                </ResponsiveContainer>
+              <div>
+                <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Distribuição por Fila</h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Volume de chamados por setor</p>
               </div>
-              <p className="text-[9px] text-center font-bold text-slate-400 uppercase mt-4">Dica: Clique nas barras para ver os detalhes da fila</p>
             </div>
-          </div>
-
-          {/* Top-Right: Key Metrics */}
-          <div className="flex flex-col gap-6">
-            <MetricBox 
-              label="Volume de Escalonamento" 
-              value={`${escRate}%`} 
-              icon={TrendingUp} 
-              color="text-amber-600"
-              subtitle="N1 para N2"
-              trendValue="Sob controle"
-            />
-            <MetricBox 
-              label="Tempo de Resposta N2" 
-              value={formatToHMM(avgRespN2)} 
-              icon={Timer} 
-              color="text-blue-600"
-              subtitle="Média de espera"
-              trendValue="Estável"
-            />
+            <div className="flex-1 h-0 min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={queueData.slice(0, 8)} onClick={(data) => data && data.activePayload && handleQueueClick(data.activeLabel)}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                  <Tooltip 
+                    cursor={{ fill: '#f8fafc' }}
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  />
+                  <Bar dataKey="value" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={40} className="cursor-pointer hover:opacity-80 transition-opacity" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="text-[9px] text-center font-bold text-slate-400 uppercase mt-4">Dica: Clique nas barras para ver os detalhes da fila</p>
           </div>
         </div>
 
-        {/* Bottom Partition: Performance and Recurrence Rankings */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <RankingPerformance data={data} />
-          <RankingDeRecorrencia data={data} ticketsAnalisados={ticketsAnalisados} onViewDetail={handleQueueClick} />
+        {/* Row 3: Ranking de Recorrência + Ranking de Performance (Side-by-Side) */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="lg:col-span-2">
+            <SubjectsListCard 
+              subjects={subjectsRanking} 
+              onSubjectClick={handleSubjectClick}
+              totalTickets={ticketsAnalisados}
+            />
+          </div>
+          <div className="lg:col-span-2">
+            <RankingPerformance data={data} hFull />
+          </div>
         </div>
       </div>
 
@@ -4832,95 +4819,207 @@ const AnalysisOfTicketsView = memo(({ data, allUniqueValues }: { data: CallData[
   );
 });
 
-function RankingDeRecorrencia({ data, ticketsAnalisados, onViewDetail }: { data: CallData[], ticketsAnalisados: number, onViewDetail: (queue: string) => void }) {
+function PerformancePorTickets({ data }: { data: CallData[] }) {
   const ranking = useMemo(() => {
-    // 1. Group data by Team/Queue using pre-calculated _team
-    const teamGroups = data.reduce((acc, call) => {
-      const q = call._team || 'Sem Origem';
-      if (!acc[q]) acc[q] = [];
-      acc[q].push(call);
+    const agents = data.reduce((acc, call) => {
+      const name = call.agentName || 'Não Identificado';
+      if (name === 'Ligações Perdidas') return acc;
+      acc[name] = (acc[name] || 0) + 1;
       return acc;
-    }, {} as Record<string, CallData[]>);
+    }, {} as Record<string, number>);
 
-    // 2. For each team, count tickets that have a recurrent subject (subject appears > 1 time)
-    return Object.entries(teamGroups).map(([name, teamTickets]) => {
-      const subjectCounts = teamTickets.reduce((acc, call) => {
-        const s = call.subject || 'Sem assunto';
-        acc[s] = (acc[s] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
-
-      const recurrentTicketsCount = Object.values(subjectCounts).reduce((sum, count) => {
-        return sum + (count > 1 ? count : 0);
-      }, 0);
-
-      const percentage = ticketsAnalisados > 0 ? Math.round((recurrentTicketsCount / ticketsAnalisados) * 100) : 0;
-      
-      return { 
-        name, 
-        value: recurrentTicketsCount, 
-        percentage 
-      };
-    })
-    .filter(item => item.value > 0)
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 10);
-  }, [data, ticketsAnalisados]);
+    return Object.entries(agents)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 7)
+      .reverse(); // Reverse for horizontal layout
+  }, [data]);
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[480px]">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">RANKING DE RECORRÊNCIA</h3>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">DISTRIBUIÇÃO DE VOLUME POR CATEGORIA</p>
-        </div>
-        <button 
-          onClick={() => onViewDetail(ranking[0]?.name || '')}
-          className="flex items-center gap-2 px-6 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-widest hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all group"
-        >
-          <TrendingUp className="h-3 w-3 group-hover:scale-110 transition-transform" />
-          VER TICKETS
-        </button>
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px]">
+      <div className="mb-6">
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">PERFORMANCE POR TICKETS</h3>
       </div>
-
-      <div className="flex-1 overflow-y-auto pr-2 space-y-8 scrollbar-thin scrollbar-thumb-slate-200">
-        {ranking.map((item, idx) => (
-          <div key={idx} className="group cursor-pointer" onClick={() => onViewDetail(item.name)}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-black text-slate-700 tracking-tight">{item.name}</span>
-                <span className="px-2 py-0.5 bg-slate-50 border border-slate-100 text-[8px] font-black text-slate-400 uppercase tracking-widest rounded-md">Automático</span>
-              </div>
-              <div className="flex items-center gap-8">
-                <div className="flex flex-col items-end">
-                   <span className="text-sm font-black text-slate-800 leading-none">{item.value}</span>
-                   <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">Tickets</span>
-                </div>
-                <span className="text-sm font-black text-blue-600 min-w-[40px] text-right">{item.percentage}%</span>
-                <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-blue-400 transition-colors" />
-              </div>
-            </div>
-            <div className="w-full h-2 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
-              <motion.div 
-                initial={{ width: 0 }}
-                animate={{ width: `${item.percentage}%` }}
-                transition={{ duration: 1, ease: 'easeOut', delay: idx * 0.1 }}
-                className="h-full bg-blue-500 rounded-full"
-              />
-            </div>
-          </div>
-        ))}
-        {ranking.length === 0 && (
-          <div className="h-full flex items-center justify-center text-slate-400 text-[10px] font-black uppercase">
-            Nenhum dado de recorrência identificado
-          </div>
-        )}
+      <div className="flex-1 h-0 min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            layout="vertical"
+            data={ranking}
+            margin={{ left: 40, right: 20, top: 0, bottom: 0 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+            <XAxis type="number" hide />
+            <YAxis 
+              dataKey="name" 
+              type="category" 
+              width={80} 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{ fontSize: 9, fontWeight: 700, fill: '#475569' }}
+            />
+            <Tooltip 
+              cursor={{ fill: 'transparent' }}
+              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+            />
+            <Bar dataKey="value" fill="#3b82f6" radius={[0, 6, 6, 0]} barSize={24}>
+              <LabelList dataKey="value" position="right" style={{ fontSize: 10, fontWeight: 800, fill: '#64748b' }} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
 }
 
-function RankingPerformance({ data }: { data: CallData[] }) {
+function GargalosPorStatus({ data }: { data: CallData[] }) {
+  const chartData = useMemo(() => {
+    const counts = {
+      Normal: 0,
+      Atenção: 0,
+      Crítico: 0
+    };
+
+    data.forEach(d => {
+      const wait = d.waitTime || 0;
+      if (wait < 300) counts.Normal++;
+      else if (wait < 900) counts.Atenção++;
+      else counts.Crítico++;
+    });
+
+    return [
+      { name: 'Normal', value: counts.Normal, fill: '#10b981' },
+      { name: 'Atenção', value: counts.Atenção, fill: '#f59e0b' },
+      { name: 'Crítico', value: counts.Crítico, fill: '#ef4444' }
+    ];
+  }, [data]);
+
+  return (
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px]">
+      <div className="mb-6 text-center lg:text-left">
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">GARGALOS POR STATUS</h3>
+      </div>
+      <div className="flex-1 h-0 min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+            <XAxis 
+              dataKey="name" 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }}
+            />
+            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+            <Tooltip 
+              cursor={{ fill: '#f8fafc' }}
+              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+            />
+            <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={50}>
+              {chartData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.fill} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function SubjectsListCard({ subjects, onSubjectClick, totalTickets }: { subjects: { name: string, primaryName: string, value: number, percentage: number, names: string[] }[], onSubjectClick: (names: string[], primaryName: string) => void, totalTickets: number }) {
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredSubjects = useMemo(() => {
+    if (!searchTerm) return subjects.slice(0, 50); // Show top 50 by default
+    const lower = searchTerm.toLowerCase();
+    return subjects.filter(sub => 
+      sub.name.toLowerCase().includes(lower) || 
+      sub.names.some(n => n.toLowerCase().includes(lower))
+    ).slice(0, 100);
+  }, [subjects, searchTerm]);
+
+  const totalFilteredCount = useMemo(() => {
+    if (!searchTerm) return totalTickets;
+    return filteredSubjects.reduce((acc, sub) => acc + sub.value, 0);
+  }, [filteredSubjects, searchTerm, totalTickets]);
+
+  return (
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px]">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-orange-50 text-orange-600 rounded-xl">
+            <Search className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Ranking de Recorrência</h3>
+            <p className="text-[10px] font-bold text-slate-400 uppercase">Classificação por semelhança</p>
+          </div>
+        </div>
+        <div className="relative w-48">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Buscar..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 text-[10px] font-bold text-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all uppercase placeholder:text-slate-400"
+          />
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-200">
+        <table className="w-full border-separate border-spacing-y-2">
+          <thead>
+            <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-left">
+              <th className="pb-1 px-2">Assunto</th>
+              <th className="pb-1 px-2 text-center w-16">Vol.</th>
+              <th className="pb-1 px-2 text-right w-24">Perc.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredSubjects.map((sub, idx) => (
+              <tr 
+                key={idx} 
+                className="group hover:bg-slate-50/80 transition-all cursor-pointer"
+                onClick={() => onSubjectClick(sub.names, sub.primaryName)}
+              >
+                <td className="py-2.5 px-3 bg-slate-50/50 rounded-l-xl border-y border-l border-slate-100 group-hover:border-orange-200">
+                  <div className="flex flex-col">
+                    <span className="text-[11px] font-bold text-slate-700 truncate max-w-[280px]" title={sub.primaryName}>{sub.primaryName}</span>
+                    {sub.names.length > 1 && (
+                      <span className="text-[9px] font-medium text-slate-400 uppercase">{sub.names.length} variações</span>
+                    )}
+                  </div>
+                </td>
+                <td className="py-2.5 px-3 bg-slate-50/50 border-y border-slate-100 group-hover:border-orange-200 text-center">
+                  <span className="text-[11px] font-black text-slate-500 tabular-nums">{sub.value}</span>
+                </td>
+                <td className="py-2.5 px-3 bg-slate-50/50 rounded-r-xl border-y border-r border-slate-100 group-hover:border-orange-200 text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    <div className="w-12 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-orange-400" 
+                        style={{ width: `${sub.percentage}%` }}
+                      />
+                    </div>
+                    <span className="text-[11px] font-black text-orange-600 tabular-nums min-w-[32px]">{sub.percentage}%</span>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {filteredSubjects.length === 0 && (
+          <div className="py-8 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            Nenhum assunto encontrado
+          </div>
+        )}
+      </div>
+      <p className="text-[9px] text-center font-bold text-slate-400 uppercase mt-4">Dica: Clique em um assunto para visualizar os tickets detalhados</p>
+    </div>
+  );
+}
+
+function RankingPerformance({ data, hFull = false }: { data: CallData[], hFull?: boolean }) {
   const [activeTab, setActiveTab] = useState<'score' | 'tickets'>('tickets');
   
   const rankings = useMemo(() => {
@@ -4960,7 +5059,7 @@ function RankingPerformance({ data }: { data: CallData[] }) {
   }, [data, activeTab]);
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[480px] overflow-hidden">
+    <div className={`bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col ${hFull ? 'h-[424px]' : 'h-[480px]'} overflow-hidden`}>
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-orange-50 text-orange-500 rounded-xl transition-transform hover:scale-105 duration-300">
