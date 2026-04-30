@@ -34,6 +34,14 @@ const getLevenshteinDistance = (a: string, b: string): number => {
   return matrix[a.length][b.length];
 };
 
+const normalizeText = (text: string): string => {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+};
+
 const isSimilarSubject = (a: string, b: string, threshold = 0.25) => {
   const nA = a.toLowerCase().trim();
   const nB = b.toLowerCase().trim();
@@ -4746,35 +4754,12 @@ const AnalysisOfTicketsView = memo(({ data, allUniqueValues }: { data: CallData[
       <div className="space-y-6">
         {/* Row 2: 3 metrics - Performance por Tickets, Gargalos por Status, Distribuição por Fila */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <PerformancePorTickets data={data} />
           <GargalosPorStatus data={data} />
-          {/* Distribuição por Fila moved here */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px]">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                <ListTree className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Distribuição por Fila</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Volume de chamados por setor</p>
-              </div>
-            </div>
-            <div className="flex-1 h-0 min-h-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={queueData.slice(0, 8)} onClick={(data) => data && data.activePayload && handleQueueClick(data.activeLabel)}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                  <Tooltip 
-                    cursor={{ fill: '#f8fafc' }}
-                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                  />
-                  <Bar dataKey="value" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={40} className="cursor-pointer hover:opacity-80 transition-opacity" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <p className="text-[9px] text-center font-bold text-slate-400 uppercase mt-4">Dica: Clique nas barras para ver os detalhes da fila</p>
-          </div>
+          <QueueDistributionDonut 
+            data={queueData} 
+            onQueueClick={handleQueueClick} 
+          />
+          <PerformancePorTickets data={data} />
         </div>
 
         {/* Row 3: Ranking de Recorrência + Ranking de Performance (Side-by-Side) */}
@@ -4872,6 +4857,27 @@ function PerformancePorTickets({ data }: { data: CallData[] }) {
 }
 
 function GargalosPorStatus({ data }: { data: CallData[] }) {
+  const [selectedService, setSelectedService] = useState('Todos');
+  const [selectedUrgency, setSelectedUrgency] = useState('Todos');
+  const [selectedTeam, setSelectedTeam] = useState('Todos');
+  const [selectedOrigin, setSelectedOrigin] = useState('Todos');
+  const [showFilters, setShowFilters] = useState(false);
+
+  const services = useMemo(() => ['Todos', ...Array.from(new Set(data.map(d => d.service).filter(Boolean))).sort()], [data]);
+  const urgencies = useMemo(() => ['Todos', ...Array.from(new Set(data.map(d => d.urgency).filter(Boolean))).sort()], [data]);
+  const teams = useMemo(() => ['Todos', ...Array.from(new Set(data.map(d => d._team).filter(Boolean))).sort()], [data]);
+  const origins = useMemo(() => ['Todos', ...Array.from(new Set(data.map(d => d.origin).filter(Boolean))).sort()], [data]);
+
+  const filteredDataByCategories = useMemo(() => {
+    return data.filter(d => {
+      const matchS = selectedService === 'Todos' || d.service === selectedService;
+      const matchU = selectedUrgency === 'Todos' || d.urgency === selectedUrgency;
+      const matchT = selectedTeam === 'Todos' || d._team === selectedTeam;
+      const matchO = selectedOrigin === 'Todos' || d.origin === selectedOrigin;
+      return matchS && matchU && matchT && matchO;
+    });
+  }, [data, selectedService, selectedUrgency, selectedTeam, selectedOrigin]);
+
   const chartData = useMemo(() => {
     const counts = {
       Normal: 0,
@@ -4879,7 +4885,7 @@ function GargalosPorStatus({ data }: { data: CallData[] }) {
       Crítico: 0
     };
 
-    data.forEach(d => {
+    filteredDataByCategories.forEach(d => {
       const wait = d.waitTime || 0;
       if (wait < 300) counts.Normal++;
       else if (wait < 900) counts.Atenção++;
@@ -4891,16 +4897,111 @@ function GargalosPorStatus({ data }: { data: CallData[] }) {
       { name: 'Atenção', value: counts.Atenção, fill: '#f59e0b' },
       { name: 'Crítico', value: counts.Crítico, fill: '#ef4444' }
     ];
-  }, [data]);
+  }, [filteredDataByCategories]);
+
+  const hasActiveFilters = selectedService !== 'Todos' || selectedUrgency !== 'Todos' || selectedTeam !== 'Todos' || selectedOrigin !== 'Todos';
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px]">
-      <div className="mb-6 text-center lg:text-left">
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px] relative">
+      <div className="mb-8 flex items-center justify-between">
         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">GARGALOS POR STATUS</h3>
+        <div className="relative">
+          <button 
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${
+              showFilters || hasActiveFilters 
+                ? 'bg-blue-50 border-blue-200 text-blue-600' 
+                : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-slate-100'
+            } text-[9px] font-black uppercase tracking-widest`}
+          >
+            <Filter className={`h-3 w-3 ${hasActiveFilters ? 'animate-pulse' : ''}`} />
+            {hasActiveFilters ? 'Filtros Ativos' : 'Filtrar'}
+            <ChevronDown className={`h-3 w-3 transition-transform duration-300 ${showFilters ? 'rotate-180' : ''}`} />
+          </button>
+
+          {/* Filters Dropdown */}
+          <AnimatePresence>
+            {showFilters && (
+              <>
+                <div 
+                  className="fixed inset-0 z-10" 
+                  onClick={() => setShowFilters(false)} 
+                />
+                <motion.div 
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute right-0 mt-2 w-64 bg-white rounded-xl border border-slate-200 shadow-xl z-20 p-4 space-y-4"
+                >
+                  <div className="flex items-center justify-between pb-2 border-border-slate-100">
+                    <span className="text-[10px] font-black text-slate-400 uppercase">Configuração de Filtros</span>
+                    {hasActiveFilters && (
+                      <button 
+                        onClick={() => {
+                          setSelectedService('Todos');
+                          setSelectedUrgency('Todos');
+                          setSelectedTeam('Todos');
+                          setSelectedOrigin('Todos');
+                        }}
+                        className="text-[9px] font-bold text-blue-500 hover:underline"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[9px] font-black text-slate-400 uppercase">Serviço</label>
+                      <select 
+                        value={selectedService} 
+                        onChange={(e) => setSelectedService(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-500/20"
+                      >
+                        {services.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[9px] font-black text-slate-400 uppercase">Urgência</label>
+                      <select 
+                        value={selectedUrgency} 
+                        onChange={(e) => setSelectedUrgency(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-500/20"
+                      >
+                        {urgencies.map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[9px] font-black text-slate-400 uppercase">Equipe</label>
+                      <select 
+                        value={selectedTeam} 
+                        onChange={(e) => setSelectedTeam(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-500/20"
+                      >
+                        {teams.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[9px] font-black text-slate-400 uppercase">Origem</label>
+                      <select 
+                        value={selectedOrigin} 
+                        onChange={(e) => setSelectedOrigin(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-500/20"
+                      >
+                        {origins.map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
+
       <div className="flex-1 h-0 min-h-0">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+          <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
             <XAxis 
               dataKey="name" 
@@ -4908,18 +5009,22 @@ function GargalosPorStatus({ data }: { data: CallData[] }) {
               tickLine={false} 
               tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }}
             />
-            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#64748b' }} />
             <Tooltip 
               cursor={{ fill: '#f8fafc' }}
               contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
             />
-            <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={50}>
+            <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
               {chartData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={entry.fill} />
               ))}
+              <LabelList dataKey="value" position="top" style={{ fontSize: 10, fontWeight: 800, fill: '#64748b' }} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+      </div>
+      <div className="mt-4 text-[9px] font-black text-slate-400 uppercase text-center flex items-center justify-center gap-2">
+         <span>Total Filtrado: {filteredDataByCategories.length}</span>
       </div>
     </div>
   );
@@ -4930,10 +5035,10 @@ function SubjectsListCard({ subjects, onSubjectClick, totalTickets }: { subjects
 
   const filteredSubjects = useMemo(() => {
     if (!searchTerm) return subjects.slice(0, 50); // Show top 50 by default
-    const lower = searchTerm.toLowerCase();
+    const normalizedSearch = normalizeText(searchTerm);
     return subjects.filter(sub => 
-      sub.name.toLowerCase().includes(lower) || 
-      sub.names.some(n => n.toLowerCase().includes(lower))
+      normalizeText(sub.name).includes(normalizedSearch) || 
+      sub.names.some(n => normalizeText(n).includes(normalizedSearch))
     ).slice(0, 100);
   }, [subjects, searchTerm]);
 
@@ -5015,6 +5120,105 @@ function SubjectsListCard({ subjects, onSubjectClick, totalTickets }: { subjects
         )}
       </div>
       <p className="text-[9px] text-center font-bold text-slate-400 uppercase mt-4">Dica: Clique em um assunto para visualizar os tickets detalhados</p>
+    </div>
+  );
+}
+
+function QueueDistributionDonut({ data, onQueueClick }: { data: { name: string, value: number }[], onQueueClick: (name: string) => void }) {
+  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#14b8a6', '#f97316', '#6366f1'];
+  
+  const total = useMemo(() => data.reduce((acc, curr) => acc + curr.value, 0), [data]);
+  
+  const topData = useMemo(() => {
+    return data
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8)
+      .map(item => ({
+        ...item,
+        percentage: total > 0 ? Math.round((item.value / total) * 100) : 0
+      }));
+  }, [data, total]);
+
+  return (
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px]">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+          <ListTree className="h-5 w-5" />
+        </div>
+        <div>
+          <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Distribuição por Fila</h3>
+          <p className="text-[10px] font-bold text-slate-400 uppercase">Volume de chamados por setor</p>
+        </div>
+      </div>
+      
+      <div className="flex-1 flex flex-col overflow-hidden justify-center">
+        {/* Donut Chart and Legend */}
+        <div className="flex flex-col lg:flex-row items-center justify-center flex-1 min-h-0 gap-8 lg:px-4">
+          <div className="relative w-full lg:w-1/2 h-56 lg:h-full max-h-[280px] shrink-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={topData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius="65%"
+                  outerRadius="90%"
+                  paddingAngle={4}
+                  dataKey="value"
+                  onClick={(d) => onQueueClick(d.name)}
+                  className="cursor-pointer outline-none focus:outline-none"
+                >
+                  {topData.map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={COLORS[index % COLORS.length]}
+                      className="hover:opacity-80 transition-opacity"
+                    />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 'bold' }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none translate-y-1">
+              <span className="text-2xl font-black text-slate-800 leading-none">{total}</span>
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Tickets</span>
+            </div>
+          </div>
+
+          <div className="flex-1 w-full overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-200 space-y-4 py-4">
+            {topData.map((item, index) => (
+              <div 
+                key={index} 
+                className="group cursor-pointer flex flex-col"
+                onClick={() => onQueueClick(item.name)}
+              >
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                    <span className="text-[10px] font-black text-slate-700 truncate uppercase tracking-tight group-hover:text-blue-600 transition-colors">{item.name}</span>
+                  </div>
+                  <span className="text-[9px] font-black text-slate-400 tabular-nums whitespace-nowrap">{item.value}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${item.percentage}%` }}
+                      transition={{ duration: 1, ease: 'easeOut', delay: index * 0.1 }}
+                      className="h-full rounded-full"
+                      style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                    />
+                  </div>
+                  <span className="text-[9px] font-black text-slate-600 min-w-[24px] text-right">{item.percentage}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <p className="text-[9px] text-center font-bold text-slate-400 uppercase mt-4">Clique para filtrar detalhes</p>
     </div>
   );
 }
