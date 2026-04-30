@@ -55,8 +55,16 @@ export default function App() {
             if (isExcel) {
               const data = new Uint8Array(evt.target?.result as ArrayBuffer);
               const workbook = XLSX.read(data, { type: 'array' });
-              const firstSheetName = workbook.SheetNames[0];
+              const firstSheetName = workbook.SheetNames?.[0];
+              if (!firstSheetName) {
+                resolve();
+                return;
+              }
               const worksheet = workbook.Sheets[firstSheetName];
+              if (!worksheet) {
+                resolve();
+                return;
+              }
               // Use sheet_to_csv but with raw: false to get formatted strings as seen in Excel
               text = XLSX.utils.sheet_to_csv(worksheet, { blankrows: false });
             } else {

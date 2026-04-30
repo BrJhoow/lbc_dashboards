@@ -364,8 +364,8 @@ function formatPhone(num: string) {
   return num;
 }
 
-function formatAgentName(fullName: string) {
-  if (!fullName || fullName.trim() === '') return 'Ligações Perdidas';
+function formatAgentName(fullName: any) {
+  if (!fullName || typeof fullName !== 'string' || fullName.trim() === '') return 'Ligações Perdidas';
   const lower = fullName.toLowerCase();
   
   // Custom Mappings and Groupings requested by user
@@ -2565,7 +2565,7 @@ function AgentDetailedProductivityCard({ data }: { data: CallData[] }) {
           <table className="w-full text-[11px] text-left border-collapse min-w-max border border-slate-200">
             <thead className="bg-slate-50 sticky top-0 z-10 box-border text-[9px] font-black text-slate-600 uppercase">
               <tr>
-                <th className="px-3 py-2 border border-slate-200 bg-slate-50 font-bold sticky left-0 z-20 min-w-[120px] shadow-[1px_0_0_0_#e2e8f0]">Mês de {monthNames[selectedMonth]}</th>
+                <th className="px-3 py-2 border border-slate-200 bg-slate-50 font-bold sticky left-0 z-20 min-w-[120px] shadow-[3px_0_6px_-3px_rgba(0,0,0,0.1)]">Mês de {monthNames[selectedMonth]}</th>
                 {calendarData.daysInMonth.map((d, i) => (
                   <th key={i} className="px-1 py-1.5 border border-slate-200 text-center min-w-[40px]">
                     <div className="flex flex-col items-center">
@@ -2581,7 +2581,7 @@ function AgentDetailedProductivityCard({ data }: { data: CallData[] }) {
             <tbody className="bg-white">
               {calendarData.agents.map((agent, aIdx) => (
                 <tr key={aIdx} className="hover:bg-slate-50">
-                  <td className="px-3 py-2 border border-slate-200 font-bold text-slate-700 bg-white sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] truncate max-w-[140px]">
+                  <td className="px-3 py-2 border border-slate-200 font-bold text-slate-700 bg-white sticky left-0 z-20 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)] truncate max-w-[140px]">
                     {agent}
                   </td>
                   {calendarData.daysInMonth.map((d, dIdx) => {
@@ -2629,7 +2629,7 @@ function AgentDetailedProductivityCard({ data }: { data: CallData[] }) {
               <tr><td colSpan={calendarData.daysInMonth.length + 3} className="h-4 border-none bg-transparent"></td></tr>
 
               <tr className="bg-slate-50">
-                <td className="px-3 py-2 border border-slate-200 font-black text-slate-800 bg-slate-100 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]">Total diário</td>
+                <td className="px-3 py-2 border border-slate-200 font-black text-slate-800 bg-slate-100 sticky left-0 z-20 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)]">Total diário</td>
                 {calendarData.daysInMonth.map((d, dIdx) => {
                   const key = format(d, 'yyyy-MM-dd');
                   const count = calendarData.dailyTotals[key].count;
@@ -2646,7 +2646,7 @@ function AgentDetailedProductivityCard({ data }: { data: CallData[] }) {
                 })()}
               </tr>
               <tr className="bg-slate-50">
-                <td className="px-3 py-2 border border-slate-200 font-black text-slate-800 bg-slate-100 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]">Média</td>
+                <td className="px-3 py-2 border border-slate-200 font-black text-slate-800 bg-slate-100 sticky left-0 z-10 shadow-[3px_0_6px_-3px_rgba(0,0,0,0.1)]">Média</td>
                 {calendarData.daysInMonth.map((d, dIdx) => {
                   const key = format(d, 'yyyy-MM-dd');
                   const count = calendarData.dailyTotals[key].count;
@@ -2701,7 +2701,7 @@ function AgentDetailedProductivityCard({ data }: { data: CallData[] }) {
                 return (
                   <>
                     <tr>
-                      <td className="px-3 py-2 border border-slate-200 font-bold text-slate-700 bg-white sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]">Total chat</td>
+                      <td className="px-3 py-2 border border-slate-200 font-bold text-slate-700 bg-white sticky left-0 z-10 shadow-[3px_0_6px_-3px_rgba(0,0,0,0.1)]">Total chat</td>
                       {calendarData.daysInMonth.map((d, dIdx) => {
                         const key = format(d, 'yyyy-MM-dd');
                         const count = calendarData.dailyTotals[key].chat;
@@ -2710,7 +2710,7 @@ function AgentDetailedProductivityCard({ data }: { data: CallData[] }) {
                       {renderSummaryRowValues('chat')}
                     </tr>
                     <tr>
-                      <td className="px-3 py-2 border border-slate-200 font-bold text-slate-700 bg-white sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]">Total ligações atendidas</td>
+                      <td className="px-3 py-2 border border-slate-200 font-bold text-slate-700 bg-white sticky left-0 z-10 shadow-[3px_0_6px_-3px_rgba(0,0,0,0.1)]">Total ligações atendidas</td>
                       {calendarData.daysInMonth.map((d, dIdx) => {
                         const key = format(d, 'yyyy-MM-dd');
                         const count = calendarData.dailyTotals[key].calls;
@@ -2719,7 +2719,7 @@ function AgentDetailedProductivityCard({ data }: { data: CallData[] }) {
                       {renderSummaryRowValues('calls')}
                     </tr>
                     <tr>
-                      <td className="px-3 py-2 border border-slate-200 font-bold text-slate-700 bg-emerald-50 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]">Total de atendimentos</td>
+                      <td className="px-3 py-2 border border-slate-200 font-bold text-slate-700 bg-emerald-50 sticky left-0 z-10 shadow-[3px_0_6px_-3px_rgba(0,0,0,0.1)]">Total de atendimentos</td>
                       {calendarData.daysInMonth.map((d, dIdx) => {
                         const key = format(d, 'yyyy-MM-dd');
                         const count = calendarData.dailyTotals[key].total;
@@ -2734,7 +2734,7 @@ function AgentDetailedProductivityCard({ data }: { data: CallData[] }) {
                       {renderSummaryRowValues('total')}
                     </tr>
                     <tr>
-                      <td className="px-3 py-2 border border-slate-200 font-bold text-slate-700 bg-rose-50 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]">Ligações perdidas</td>
+                      <td className="px-3 py-2 border border-slate-200 font-bold text-slate-700 bg-rose-50 sticky left-0 z-10 shadow-[3px_0_6px_-3px_rgba(0,0,0,0.1)]">Ligações perdidas</td>
                       {calendarData.daysInMonth.map((d, dIdx) => {
                         const key = format(d, 'yyyy-MM-dd');
                         const count = calendarData.dailyTotals[key].lost;
@@ -2915,8 +2915,8 @@ function AdvancedRecurrenceIndex({ data }: { data: CallData[] }) {
 }
 
 function ProductivityCalendar({ data }: { data: CallData[] }) {
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(3); // April
+  const [selectedYear, setSelectedYear] = useState(2026); // 2026
   const [selectedAgent, setSelectedAgent] = useState('Todos');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
@@ -3038,40 +3038,40 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
     <>
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col h-[424px] group transition-all duration-300 hover:shadow-blue-500/11">
       {/* Header Section */}
-      <div className="flex flex-col items-center gap-4 mb-6 relative">
-        <div className="w-full flex items-center justify-between">
+      <div className="flex flex-col items-center mb-3 relative">
+        <div className="w-full flex items-center justify-between mb-2">
           <div className="w-10" />
-          <h3 className="text-sm font-black text-slate-800 uppercase tracking-[0.3em] text-center">Produtividade</h3>
+          <h3 className="text-xs font-black text-slate-800 uppercase tracking-[0.3em] text-center">Produtividade</h3>
           <button 
             onClick={() => setIsModalOpen(true)}
-            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-neutral-50 rounded-xl transition-all"
+            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-neutral-50 rounded-xl transition-all"
             title="Expandir visualização"
           >
-            <Maximize2 className="h-5 w-5" />
+            <Maximize2 className="h-4 w-4" />
           </button>
         </div>
 
         {/* Controls Row */}
-        <div className="flex items-center justify-center gap-2 w-full">
+        <div className="flex items-center justify-center gap-2 w-full mb-4">
           {/* Month Selector */}
-          <div className="flex items-center gap-0.5 bg-slate-100/50 p-1 rounded-xl border border-slate-200">
+          <div className="flex items-center gap-0.5 bg-slate-100/50 p-0.5 rounded-lg border border-slate-200">
             <button 
               onClick={handlePrevMonth}
-              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-white hover:shadow-sm rounded-lg transition-all shrink-0"
+              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-white hover:shadow-sm rounded-md transition-all shrink-0"
             >
-              <ChevronLeft className="h-3.5 w-3.5" />
+              <ChevronLeft className="h-3 w-3" />
             </button>
             <button 
               onClick={() => setIsDatePopupOpen(!isDatePopupOpen)}
-              className="px-2 py-0.5 text-[10px] font-black text-slate-700 uppercase tracking-widest min-w-[100px] text-center"
+              className="px-1.5 py-0.5 text-[9px] font-black text-slate-700 uppercase tracking-widest min-w-[80px] text-center"
             >
               {monthNames[selectedMonth]} {selectedYear}
             </button>
             <button 
               onClick={handleNextMonth}
-              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-white hover:shadow-sm rounded-lg transition-all shrink-0"
+              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-white hover:shadow-sm rounded-md transition-all shrink-0"
             >
-              <ChevronRight className="h-3.5 w-3.5" />
+              <ChevronRight className="h-3 w-3" />
             </button>
           </div>
 
@@ -3079,7 +3079,7 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
           <select 
             value={selectedAgent} 
             onChange={(e) => setSelectedAgent(e.target.value)}
-            className="text-[10px] font-black bg-slate-100/50 border border-slate-200 rounded-xl px-3 py-1.5 outline-none hover:border-blue-300 transition-all cursor-pointer text-slate-600 appearance-none text-center uppercase tracking-tighter min-w-[110px]"
+            className="text-[9px] font-black bg-slate-100/50 border border-slate-200 rounded-lg px-2 py-1 outline-none hover:border-blue-300 transition-all cursor-pointer text-slate-600 appearance-none text-center uppercase tracking-tighter min-w-[90px]"
           >
             {agents.map(a => <option key={a} value={a}>{formatAgentName(a)}</option>)}
           </select>
@@ -3087,44 +3087,44 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
       </div>
 
       {/* Main Content Area: Legend (Left) + Grid (Right) */}
-      <div className="flex-1 flex items-stretch gap-6 overflow-hidden">
+      <div className="flex-1 flex items-center justify-center gap-4 overflow-hidden pb-4">
         {/* Legend Column (Left) */}
-        <div className="flex flex-col justify-center gap-4 py-2 border-r border-slate-50 pr-6 shrink-0">
-          <div className="flex flex-col gap-3">
+        <div className="flex flex-col justify-center gap-4 py-2 border-r border-slate-100 pr-4 shrink-0">
+          <div className="flex flex-col gap-4">
              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded bg-slate-50 border border-slate-100 shadow-sm" />
-                  <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Vazio</span>
+                <div className="flex items-center gap-3">
+                  <div className="w-4 h-4 rounded bg-slate-50 border border-slate-100 shadow-sm" />
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Vazio</span>
                 </div>
              </div>
              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded bg-red-50 border border-red-100 shadow-sm" />
-                  <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">1 - 5</span>
+                <div className="flex items-center gap-3">
+                  <div className="w-4 h-4 rounded bg-red-50 border border-red-100 shadow-sm" />
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">1 - 5</span>
                 </div>
              </div>
              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded bg-orange-50 border border-orange-100 shadow-sm" />
-                  <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">6 - 10</span>
+                <div className="flex items-center gap-3">
+                  <div className="w-4 h-4 rounded bg-orange-50 border border-orange-100 shadow-sm" />
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">6 - 10</span>
                 </div>
              </div>
              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded bg-yellow-50 border border-yellow-100 shadow-sm" />
-                  <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">11 - 15</span>
+                <div className="flex items-center gap-3">
+                  <div className="w-4 h-4 rounded bg-yellow-50 border border-yellow-100 shadow-sm" />
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">11 - 15</span>
                 </div>
              </div>
              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded bg-emerald-100 border border-emerald-200 shadow-sm" />
-                  <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">16 - 30</span>
+                <div className="flex items-center gap-3">
+                  <div className="w-4 h-4 rounded bg-emerald-100 border border-emerald-200 shadow-sm" />
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">16 - 30</span>
                 </div>
              </div>
              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded bg-emerald-400 border border-emerald-500 shadow-sm" />
-                  <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">31+</span>
+                <div className="flex items-center gap-3">
+                  <div className="w-4 h-4 rounded bg-emerald-400 border border-emerald-500 shadow-sm" />
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">31+</span>
                 </div>
              </div>
           </div>
@@ -3134,18 +3134,18 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="w-full max-w-[420px]">
             {/* Weekday Header */}
-            <div className="grid grid-cols-[65px_repeat(7,1fr)] gap-2 mb-3">
+            <div className="grid grid-cols-[70px_repeat(7,1fr)] gap-2 mb-3">
               <div />
               {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map((d, j) => (
-                <div key={j} className="text-center text-[10px] font-black text-slate-300 uppercase tracking-widest">{d.charAt(0)}</div>
+                <div key={j} className="text-center text-[10px] font-black text-slate-400/80 uppercase tracking-widest">{d.charAt(0)}</div>
               ))}
             </div>
 
             {/* Weeks Grid */}
             <div className="flex flex-col gap-2">
               {weeks.map((week, wIdx) => (
-                <div key={wIdx} className="grid grid-cols-[65px_repeat(7,1fr)] gap-2 items-center">
-                  <div className="text-[10px] font-black text-slate-300 uppercase tracking-tighter leading-none">{wIdx + 1}ª Semana</div>
+                <div key={wIdx} className="grid grid-cols-[70px_repeat(7,1fr)] gap-2 items-center">
+                  <div className="text-[10px] font-black text-slate-500 uppercase tracking-tighter leading-none">{wIdx + 1}ª Semana</div>
                   {week.map((day, dIdx) => {
                     const key = day ? format(day, 'yyyy-MM-dd') : null;
                     const count = key ? calendarData.stats[key] || 0 : 0;
@@ -3156,12 +3156,12 @@ function ProductivityCalendar({ data }: { data: CallData[] }) {
                         title={day ? `${format(day, 'dd/MM')}: ${count} chamadas` : ''}
                       >
                         {day && (
-                          <span className={`absolute top-1 left-1.5 text-[9px] font-bold select-none ${count > 30 ? 'text-white/70' : 'text-slate-400/60'}`}>
+                          <span className={`absolute top-1 left-1.5 text-[9px] font-bold select-none ${count > 30 ? 'text-white/70' : 'text-slate-500/50'}`}>
                             {day.getDate()}
                           </span>
                         )}
                         {day && count > 0 && (
-                          <span className="text-[13px] font-black tracking-tighter leading-none">{count}</span>
+                          <span className="text-[14px] font-black tracking-tighter leading-none">{count}</span>
                         )}
                       </div>
                     );
@@ -3669,7 +3669,7 @@ function MonthlyResultCard({ data }: { data: CallData[] }) {
 
     return (
       <tr className="hover:bg-slate-50 transition-colors">
-        <td className="p-2 border-b border-r border-slate-100 font-bold text-slate-700 sticky left-0 bg-white z-10 w-24 text-[10px] uppercase tracking-tighter">{label}</td>
+        <td className="p-2 border-b border-r border-slate-100 font-bold text-slate-700 sticky left-0 bg-white z-20 w-28 text-[10px] uppercase tracking-tighter shadow-[4px_0_8px_-4px_rgba(0,0,0,0.2)]">{label}</td>
         {values.map((v, i) => (
           <td key={i} className="p-1 border-b border-r border-slate-50 text-center relative min-w-[45px]">
             <div className={`relative z-10 font-bold ${v === 0 ? 'text-slate-200' : 'text-slate-700'}`}>
@@ -3751,7 +3751,7 @@ function MonthlyResultCard({ data }: { data: CallData[] }) {
         <table className="w-full text-left border-separate border-spacing-0">
           <thead className="sticky top-0 z-20">
             <tr className="bg-slate-50">
-              <th className="p-2 border-b border-r border-slate-200 text-[9px] font-black text-slate-400 uppercase tracking-widest sticky left-0 bg-slate-50 z-30">Mês</th>
+              <th className="p-2 border-b border-r border-slate-200 text-[9px] font-black text-slate-400 uppercase tracking-widest sticky left-0 bg-slate-50 z-30 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.2)]">Mês</th>
               {monthNames.map(m => (
                 <th key={m} className="p-2 border-b border-r border-slate-200 text-center text-[9px] font-black text-slate-400 uppercase tracking-widest min-w-[45px]">
                   {m}
@@ -4825,22 +4825,29 @@ function PerformancePorTickets({ data }: { data: CallData[] }) {
 
     return Object.entries(agents)
       .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 10);
+      .sort((a, b) => b.value - a.value);
   }, [filteredData]);
 
   const chartData = useMemo(() => [...ranking].reverse(), [ranking]);
 
   return (
     <>
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px]">
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px] group transition-all duration-300 hover:shadow-blue-500/10">
         <div className="mb-6 flex items-center justify-between">
-          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">PERFORMANCE POR TICKETS</h3>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-50 text-blue-500 rounded-xl transition-transform group-hover:scale-105 duration-300">
+              <BarChart2 className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight leading-none mb-0.5">Performance por Tickets</h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Volume por agente</p>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
             <select 
               value={selectedTeam} 
               onChange={(e) => setSelectedTeam(e.target.value)}
-              className="bg-slate-50 border border-slate-100 rounded-lg px-2 py-1 text-[9px] font-black text-slate-500 uppercase outline-none focus:ring-2 focus:ring-blue-500/10 cursor-pointer"
+              className="bg-slate-50 border border-slate-100 rounded-lg px-2 py-1 text-[9px] font-black text-slate-500 uppercase outline-none focus:ring-2 focus:ring-blue-500/10 cursor-pointer appearance-none text-center min-w-[80px]"
             >
               {teams.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
@@ -4852,32 +4859,40 @@ function PerformancePorTickets({ data }: { data: CallData[] }) {
             </button>
           </div>
         </div>
+
         <div className="flex-1 h-0 min-h-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              layout="vertical"
-              data={chartData}
-              margin={{ left: 40, right: 20, top: 0, bottom: 0 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-              <XAxis type="number" hide />
-              <YAxis 
-                dataKey="name" 
-                type="category" 
-                width={80} 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fontSize: 9, fontWeight: 700, fill: '#475569' }}
-              />
-              <Tooltip 
-                cursor={{ fill: 'transparent' }}
-                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-              />
-              <Bar dataKey="value" fill="#3b82f6" radius={[0, 6, 6, 0]} barSize={18}>
-                <LabelList dataKey="value" position="right" style={{ fontSize: 9, fontWeight: 800, fill: '#64748b' }} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="h-full flex flex-col gap-3 overflow-y-auto scrollbar-none pr-1">
+            {ranking.map((item, idx) => (
+              <div key={idx} className="group/row flex items-center gap-3 p-2 rounded-xl border border-transparent hover:border-slate-100 hover:bg-slate-50/50 transition-all duration-300">
+                <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 ${
+                  idx === 0 ? 'bg-amber-400 text-white shadow-sm shadow-amber-200' :
+                  idx === 1 ? 'bg-slate-300 text-white shadow-sm shadow-slate-100' :
+                  idx === 2 ? 'bg-amber-600 text-white shadow-sm shadow-amber-100' :
+                  'bg-slate-50 text-slate-400 border border-slate-100'
+                }`}>
+                  {idx + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-bold text-slate-600 truncate">{item.name}</span>
+                    <span className="text-[11px] font-black text-blue-600">{item.value}</span>
+                  </div>
+                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(item.value / (ranking[0]?.value || 1)) * 100}%` }}
+                      transition={{ duration: 1, ease: "easeOut", delay: idx * 0.1 }}
+                      className={`h-full rounded-full ${
+                        idx === 0 ? 'bg-gradient-to-r from-blue-500 to-indigo-600 shadow-[0_0_8px_rgba(59,130,246,0.3)]' : 
+                        idx < 3 ? 'bg-blue-500' : 
+                        'bg-slate-300'
+                      }`}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -4900,9 +4915,22 @@ function PerformancePorTickets({ data }: { data: CallData[] }) {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="p-8 border-b border-slate-100 flex items-center justify-between shrink-0">
-                <div>
-                  <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Performance Detalhada de Agentes</h2>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Visão Geral de Produtividade - Equipe: {selectedTeam}</p>
+                <div className="flex items-center gap-6">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Performance Detalhada de Agentes</h2>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Visão Geral de Produtividade</p>
+                  </div>
+                  <div className="h-10 w-px bg-slate-100 hidden sm:block" />
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filtrar por Equipe:</span>
+                    <select 
+                      value={selectedTeam} 
+                      onChange={(e) => setSelectedTeam(e.target.value)}
+                      className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-1.5 text-xs font-black text-slate-600 uppercase outline-none focus:ring-4 focus:ring-blue-500/10 cursor-pointer transition-all hover:border-blue-200 min-w-[140px]"
+                    >
+                      {teams.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
                 </div>
                 <button 
                   onClick={() => setShowModal(false)}
@@ -5366,10 +5394,14 @@ function RankingPerformance({ data, hFull = false }: { data: CallData[], hFull?:
       if (!acc[name]) acc[name] = { tickets: 0, totalSeconds: 0 };
       acc[name].tickets += 1;
       
-      const durationStr = call.totalLifeTime || '';
-      const days = parseInt((durationStr.match(/(\d+)d/) || ['0', '0'])[1]);
-      const hours = parseInt((durationStr.match(/(\d+)h/) || ['0', '0'])[1]);
-      const minutes = parseInt((durationStr.match(/(\d+)min/) || (durationStr.match(/(\d+)m/) || ['0', '0']))[1]);
+      const durationStr = String(call.totalLifeTime || '');
+      const daysMatch = durationStr.match(/(\d+)d/);
+      const hoursMatch = durationStr.match(/(\d+)h/);
+      const minutesMatch = durationStr.match(/(\d+)min/) || durationStr.match(/(\d+)m/);
+      
+      const days = daysMatch ? parseInt(daysMatch[1]) : 0;
+      const hours = hoursMatch ? parseInt(hoursMatch[1]) : 0;
+      const minutes = minutesMatch ? parseInt(minutesMatch[1]) : 0;
       
       acc[name].totalSeconds += (days * 86400) + (hours * 3600) + (minutes * 60);
       

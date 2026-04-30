@@ -106,16 +106,16 @@ export function parseCSVData(csvString: string): CallData[] {
       return undefined;
     };
 
-    const moviNumeroValue = findValue(['Número', 'Numero', 'Nmero']);
+    const moviNumeroValue = String(findValue(['Número', 'Numero', 'Nmero']) || '');
     const moviAbertoEmValue = findValue(['Aberto em']);
     const moviCnpjValue = findValue(['Cliente: CPF / CNPJ (Pessoa)', 'Cliente: CPF / CNPJ']);
 
-    if (moviNumeroValue !== undefined && moviAbertoEmValue !== undefined) {
+    if (moviNumeroValue && moviAbertoEmValue !== undefined) {
     // Movidesk Ticket Format
       const resolutionDate = parseMoviDate(findValue(['Resolvido em']));
       
       const rawAbertoEm = String(moviAbertoEmValue || '').trim();
-      if (!rawAbertoEm || String(moviNumeroValue).toLowerCase().startsWith('contagem')) {
+      if (!rawAbertoEm || moviNumeroValue.toLowerCase().startsWith('contagem')) {
         return; // skip if no date or is a summary row
       }
 
@@ -128,35 +128,35 @@ export function parseCSVData(csvString: string): CallData[] {
         startTime: parsedDate,
         startTimeString: rawAbertoEm,
         callerNumber: '',
-        queue: findValue(['Responsável: Equipe', 'Equipe', 'Responsvel: Equipe', 'Responsvel: Equipe']) || '',
+        queue: String(findValue(['Responsável: Equipe', 'Equipe', 'Responsvel: Equipe', 'Responsvel: Equipe']) || ''),
         waitTime: 0,
-        leftQueueReason: findValue(['Status', 'Status']) || '',
+        leftQueueReason: String(findValue(['Status', 'Status']) || ''),
         talkDuration: 0,
         callDuration: 0,
-        agentName: findValue(['Responsável', 'Responsavel', 'Responsvel', 'Responsvel']) || '',
+        agentName: String(findValue(['Responsável', 'Responsavel', 'Responsvel', 'Responsvel']) || ''),
         dialedNumberName: '',
         origin: 'Movidesk',
         ticketNumber: moviNumeroValue,
-        subject: findValue(['Assunto']),
-        urgency: findValue(['Urgência', 'Urgencia', 'Urgncia', 'Urgncia']),
-        clientName: findValue(['Cliente (Completo)']),
+        subject: String(findValue(['Assunto']) || 'Sem assunto'),
+        urgency: String(findValue(['Urgência', 'Urgencia', 'Urgncia', 'Urgncia']) || ''),
+        clientName: String(findValue(['Cliente (Completo)']) || ''),
         cnpj: moviCnpjValue ? formatCNPJ(moviCnpjValue) : undefined,
-        status: findValue(['Status']),
-        team: findValue(['Responsável: Equipe', 'Equipe', 'Responsvel: Equipe', 'Responsvel: Equipe']),
+        status: String(findValue(['Status']) || ''),
+        team: String(findValue(['Responsável: Equipe', 'Equipe', 'Responsvel: Equipe', 'Responsvel: Equipe']) || ''),
         resolutionDate: resolutionDate,
-        description: findValue(['Descrição do Ticket', 'Descricao do Ticket', 'Descrio do Ticket', 'Descrio do Ticket']),
-        totalLifeTime: findValue(['Tempo de vida (Horas corridas)', 'Tempo de vida', 'Tempo de vida (Horas corridas)']),
+        description: String(findValue(['Descrição do Ticket', 'Descricao do Ticket', 'Descrio do Ticket', 'Descrio do Ticket']) || ''),
+        totalLifeTime: String(findValue(['Tempo de vida (Horas corridas)', 'Tempo de vida', 'Tempo de vida (Horas corridas)']) || ''),
         
         // Map new fields
-        movedAt: parseMoviDate(findValue(['Movimentado em'])) || findValue(['Movimentado em']),
-        createdBy: findValue(['Criado por']),
-        tags: findValue(['Tags']),
-        service: findValue(['Serviço (Completo)', 'Servico (Completo)', 'Servio (Completo)']),
-        type: findValue(['Tipo']),
-        slaN2FirstEntry: parseMoviDate(findValue(['SLA N2 - 1ª Entrada', 'SLA N2 - 1 Entrada', 'SLA N2 - 1 Entrada'])) || findValue(['SLA N2 - 1ª Entrada', 'SLA N2 - 1 Entrada', 'SLA N2 - 1 Entrada']),
-        slaN2FirstExit: parseMoviDate(findValue(['SLA N2 - 1ª Saída', 'SLA N2 - 1 Saida', 'SLA N2 - 1 Sada'])) || findValue(['SLA N2 - 1ª Saída', 'SLA N2 - 1 Saida', 'SLA N2 - 1 Sada']),
-        firstResponseTime: findValue(['1ª Resposta (Horas Corridas)', '1 Resposta (Horas Corridas)', '1 Resposta (Horas Corridas)']),
-        downtimeHours: findValue(['Tempo parado (Horas úteis)', 'Tempo parado (Horas uteis)', 'Tempo parado (Horas teis)']),
+        movedAt: parseMoviDate(findValue(['Movimentado em'])) || String(findValue(['Movimentado em']) || ''),
+        createdBy: String(findValue(['Criado por']) || ''),
+        tags: String(findValue(['Tags']) || ''),
+        service: String(findValue(['Serviço (Completo)', 'Servico (Completo)', 'Servio (Completo)']) || ''),
+        type: String(findValue(['Tipo']) || ''),
+        slaN2FirstEntry: parseMoviDate(findValue(['SLA N2 - 1ª Entrada', 'SLA N2 - 1 Entrada', 'SLA N2 - 1 Entrada'])) || String(findValue(['SLA N2 - 1ª Entrada', 'SLA N2 - 1 Entrada', 'SLA N2 - 1 Entrada']) || ''),
+        slaN2FirstExit: parseMoviDate(findValue(['SLA N2 - 1ª Saída', 'SLA N2 - 1 Saida', 'SLA N2 - 1 Sada'])) || String(findValue(['SLA N2 - 1ª Saída', 'SLA N2 - 1 Saida', 'SLA N2 - 1 Sada']) || ''),
+        firstResponseTime: String(findValue(['1ª Resposta (Horas Corridas)', '1 Resposta (Horas Corridas)', '1 Resposta (Horas Corridas)']) || ''),
+        downtimeHours: String(findValue(['Tempo parado (Horas úteis)', 'Tempo parado (Horas uteis)', 'Tempo parado (Horas teis)']) || ''),
       });
 
       return;
