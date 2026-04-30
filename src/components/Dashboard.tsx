@@ -14,7 +14,7 @@ import {
   Download, UploadCloud, Users, PhoneCall, Clock, PhoneMissed, 
   ArrowUpDown, Search, Filter, Calendar as CalendarIcon, ChevronDown, ChevronUp, Check, X,
   CheckCircle2, Timer, TrendingUp, Thermometer, Maximize2, Copy, ChevronLeft, ChevronRight, BarChart2, ListTree, SlidersHorizontal, AlertCircle,
-  Trophy, Activity, Hash, Info, Ticket
+  Trophy, Activity, Hash, Info, Ticket, Table
 } from 'lucide-react';
 
 const getLevenshteinDistance = (a: string, b: string): number => {
@@ -4754,7 +4754,7 @@ const AnalysisOfTicketsView = memo(({ data, allUniqueValues }: { data: CallData[
       <div className="space-y-6">
         {/* Row 2: 3 metrics - Performance por Tickets, Gargalos por Status, Distribuição por Fila */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <GargalosPorStatus data={data} />
+          <StatusDistribution data={data} />
           <QueueDistributionDonut 
             data={queueData} 
             onQueueClick={handleQueueClick} 
@@ -5017,175 +5017,84 @@ function PerformancePorTickets({ data }: { data: CallData[] }) {
   );
 }
 
-function GargalosPorStatus({ data }: { data: CallData[] }) {
-  const [selectedService, setSelectedService] = useState('Todos');
-  const [selectedUrgency, setSelectedUrgency] = useState('Todos');
+function StatusDistribution({ data }: { data: CallData[] }) {
   const [selectedTeam, setSelectedTeam] = useState('Todos');
-  const [selectedOrigin, setSelectedOrigin] = useState('Todos');
-  const [showFilters, setShowFilters] = useState(false);
 
-  const services = useMemo(() => ['Todos', ...Array.from(new Set(data.map(d => d.service).filter(Boolean))).sort()], [data]);
-  const urgencies = useMemo(() => ['Todos', ...Array.from(new Set(data.map(d => d.urgency).filter(Boolean))).sort()], [data]);
   const teams = useMemo(() => ['Todos', ...Array.from(new Set(data.map(d => d._team).filter(Boolean))).sort()], [data]);
-  const origins = useMemo(() => ['Todos', ...Array.from(new Set(data.map(d => d.origin).filter(Boolean))).sort()], [data]);
 
-  const filteredDataByCategories = useMemo(() => {
-    return data.filter(d => {
-      const matchS = selectedService === 'Todos' || d.service === selectedService;
-      const matchU = selectedUrgency === 'Todos' || d.urgency === selectedUrgency;
-      const matchT = selectedTeam === 'Todos' || d._team === selectedTeam;
-      const matchO = selectedOrigin === 'Todos' || d.origin === selectedOrigin;
-      return matchS && matchU && matchT && matchO;
-    });
-  }, [data, selectedService, selectedUrgency, selectedTeam, selectedOrigin]);
+  const filteredData = useMemo(() => {
+    return data.filter(d => selectedTeam === 'Todos' || d._team === selectedTeam);
+  }, [data, selectedTeam]);
 
   const chartData = useMemo(() => {
-    const counts = {
-      Normal: 0,
-      Atenção: 0,
-      Crítico: 0
-    };
-
-    filteredDataByCategories.forEach(d => {
-      const wait = d.waitTime || 0;
-      if (wait < 300) counts.Normal++;
-      else if (wait < 900) counts.Atenção++;
-      else counts.Crítico++;
+    const counts: Record<string, number> = {};
+    filteredData.forEach(d => {
+      const status = d.status || 'Sem Status';
+      counts[status] = (counts[status] || 0) + 1;
     });
 
-    return [
-      { name: 'Normal', value: counts.Normal, fill: '#10b981' },
-      { name: 'Atenção', value: counts.Atenção, fill: '#f59e0b' },
-      { name: 'Crítico', value: counts.Crítico, fill: '#ef4444' }
-    ];
-  }, [filteredDataByCategories]);
+    return Object.entries(counts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [filteredData]);
 
-  const hasActiveFilters = selectedService !== 'Todos' || selectedUrgency !== 'Todos' || selectedTeam !== 'Todos' || selectedOrigin !== 'Todos';
+  const total = useMemo(() => chartData.reduce((sum, item) => sum + item.value, 0), [chartData]);
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px] relative">
-      <div className="mb-8 flex items-center justify-between">
-        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">GARGALOS POR STATUS</h3>
-        <div className="relative">
-          <button 
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${
-              showFilters || hasActiveFilters 
-                ? 'bg-blue-50 border-blue-200 text-blue-600' 
-                : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-slate-100'
-            } text-[9px] font-black uppercase tracking-widest`}
-          >
-            <Filter className={`h-3 w-3 ${hasActiveFilters ? 'animate-pulse' : ''}`} />
-            {hasActiveFilters ? 'Filtros Ativos' : 'Filtrar'}
-            <ChevronDown className={`h-3 w-3 transition-transform duration-300 ${showFilters ? 'rotate-180' : ''}`} />
-          </button>
-
-          {/* Filters Dropdown */}
-          <AnimatePresence>
-            {showFilters && (
-              <>
-                <div 
-                  className="fixed inset-0 z-10" 
-                  onClick={() => setShowFilters(false)} 
-                />
-                <motion.div 
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute right-0 mt-2 w-64 bg-white rounded-xl border border-slate-200 shadow-xl z-20 p-4 space-y-4"
-                >
-                  <div className="flex items-center justify-between pb-2 border-border-slate-100">
-                    <span className="text-[10px] font-black text-slate-400 uppercase">Configuração de Filtros</span>
-                    {hasActiveFilters && (
-                      <button 
-                        onClick={() => {
-                          setSelectedService('Todos');
-                          setSelectedUrgency('Todos');
-                          setSelectedTeam('Todos');
-                          setSelectedOrigin('Todos');
-                        }}
-                        className="text-[9px] font-bold text-blue-500 hover:underline"
-                      >
-                        Limpar
-                      </button>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] font-black text-slate-400 uppercase">Serviço</label>
-                      <select 
-                        value={selectedService} 
-                        onChange={(e) => setSelectedService(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-500/20"
-                      >
-                        {services.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] font-black text-slate-400 uppercase">Urgência</label>
-                      <select 
-                        value={selectedUrgency} 
-                        onChange={(e) => setSelectedUrgency(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-500/20"
-                      >
-                        {urgencies.map(u => <option key={u} value={u}>{u}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] font-black text-slate-400 uppercase">Equipe</label>
-                      <select 
-                        value={selectedTeam} 
-                        onChange={(e) => setSelectedTeam(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-500/20"
-                      >
-                        {teams.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] font-black text-slate-400 uppercase">Origem</label>
-                      <select 
-                        value={selectedOrigin} 
-                        onChange={(e) => setSelectedOrigin(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-500/20"
-                      >
-                        {origins.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px] group transition-all duration-300 hover:shadow-blue-500/10">
+      <div className="mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-indigo-50 text-indigo-500 rounded-xl transition-transform group-hover:scale-105 duration-300">
+            <ListTree className="h-4 w-4" />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight leading-none mb-0.5">Status dos Chamados</h3>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Distribuição atual</p>
+          </div>
         </div>
+        <select 
+          value={selectedTeam} 
+          onChange={(e) => setSelectedTeam(e.target.value)}
+          className="bg-slate-50 border border-slate-100 rounded-lg px-2 py-1 text-[9px] font-black text-slate-500 uppercase outline-none focus:ring-2 focus:ring-indigo-500/10 cursor-pointer appearance-none text-center min-w-[80px]"
+        >
+          {teams.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
       </div>
 
       <div className="flex-1 h-0 min-h-0">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-            <XAxis 
+          <BarChart
+            layout="vertical"
+            data={chartData.slice(0, 8)}
+            margin={{ left: 10, right: 30, top: 0, bottom: 0 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+            <XAxis type="number" hide />
+            <YAxis 
               dataKey="name" 
+              type="category" 
+              width={100} 
               axisLine={false} 
               tickLine={false} 
-              tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }}
+              tick={{ fontSize: 9, fontWeight: 700, fill: '#64748b' }}
             />
-            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#64748b' }} />
             <Tooltip 
-              cursor={{ fill: '#f8fafc' }}
+              cursor={{ fill: 'rgba(241, 245, 249, 0.5)' }}
               contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
             />
-            <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
-              {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.fill} />
+            <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={20}>
+              {chartData.map((_, index) => (
+                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
               ))}
-              <LabelList dataKey="value" position="top" style={{ fontSize: 10, fontWeight: 800, fill: '#64748b' }} />
+              <LabelList dataKey="value" position="right" style={{ fontSize: 10, fontWeight: 800, fill: '#64748b' }} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
-      <div className="mt-4 text-[9px] font-black text-slate-400 uppercase text-center flex items-center justify-center gap-2">
-         <span>Total Filtrado: {filteredDataByCategories.length}</span>
+
+      <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between">
+         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total de Chamados</span>
+         <span className="text-sm font-black text-slate-700">{total}</span>
       </div>
     </div>
   );
@@ -5193,6 +5102,7 @@ function GargalosPorStatus({ data }: { data: CallData[] }) {
 
 function SubjectsListCard({ subjects, onSubjectClick, totalTickets }: { subjects: { name: string, primaryName: string, value: number, percentage: number, names: string[] }[], onSubjectClick: (names: string[], primaryName: string) => void, totalTickets: number }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [showModal, setShowModal] = useState(false);
 
   const filteredSubjects = useMemo(() => {
     if (!searchTerm) return subjects.slice(0, 50); // Show top 50 by default
@@ -5203,85 +5113,254 @@ function SubjectsListCard({ subjects, onSubjectClick, totalTickets }: { subjects
     ).slice(0, 100);
   }, [subjects, searchTerm]);
 
-  const totalFilteredCount = useMemo(() => {
-    if (!searchTerm) return totalTickets;
-    return filteredSubjects.reduce((acc, sub) => acc + sub.value, 0);
-  }, [filteredSubjects, searchTerm, totalTickets]);
-
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px]">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-orange-50 text-orange-600 rounded-xl">
-            <Search className="h-5 w-5" />
+    <>
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px] group transition-all duration-300 hover:shadow-blue-500/10">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-orange-50 text-orange-600 rounded-xl transition-transform group-hover:scale-110 duration-300">
+              <Search className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Ranking de Recorrência</h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase">Classificação por semelhança</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Ranking de Recorrência</h3>
-            <p className="text-[10px] font-bold text-slate-400 uppercase">Classificação por semelhança</p>
+          <div className="flex items-center gap-2">
+            <div className="relative w-40 sm:w-48">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 text-[10px] font-bold text-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all uppercase placeholder:text-slate-400"
+              />
+            </div>
+            <button 
+              onClick={() => setShowModal(true)}
+              className="p-1.5 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-all border border-transparent hover:border-orange-100"
+              title="Expandir visualização"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </button>
           </div>
         </div>
-        <div className="relative w-48">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Buscar..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 text-[10px] font-bold text-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all uppercase placeholder:text-slate-400"
-          />
+
+        <div className="flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-200">
+          <table className="w-full border-separate border-spacing-y-2">
+            <thead>
+              <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-left">
+                <th className="pb-1 px-2">Assunto</th>
+                <th className="pb-1 px-2 text-center w-16">Vol.</th>
+                <th className="pb-1 px-2 text-right w-24">Perc.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredSubjects.map((sub, idx) => (
+                <tr 
+                  key={idx} 
+                  className="group/row hover:bg-slate-50/80 transition-all cursor-pointer"
+                  onClick={() => onSubjectClick(sub.names, sub.primaryName)}
+                >
+                  <td className="py-2.5 px-3 bg-slate-50/50 rounded-l-xl border-y border-l border-slate-100 group-hover/row:border-orange-200">
+                    <div className="flex flex-col">
+                      <span className="text-[11px] font-bold text-slate-700 truncate max-w-[200px]" title={sub.primaryName}>{sub.primaryName}</span>
+                      {sub.names.length > 1 && (
+                        <span className="text-[9px] font-medium text-slate-400 uppercase">{sub.names.length} variações</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-2.5 px-3 bg-slate-50/50 border-y border-slate-100 group-hover/row:border-orange-200 text-center">
+                    <span className="text-[11px] font-black text-slate-500 tabular-nums">{sub.value}</span>
+                  </td>
+                  <td className="py-2.5 px-3 bg-slate-50/50 rounded-r-xl border-y border-r border-slate-100 group-hover/row:border-orange-200 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <div className="w-12 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-orange-400" 
+                          style={{ width: `${sub.percentage}%` }}
+                        />
+                      </div>
+                      <span className="text-[11px] font-black text-orange-600 tabular-nums min-w-[32px]">{sub.percentage}%</span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredSubjects.length === 0 && (
+            <div className="py-8 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              Nenhum assunto encontrado
+            </div>
+          )}
         </div>
+        <p className="text-[9px] text-center font-bold text-slate-400 uppercase mt-4">Dica: Clique em um assunto para visualizar os tickets detalhados</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-200">
-        <table className="w-full border-separate border-spacing-y-2">
-          <thead>
-            <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-left">
-              <th className="pb-1 px-2">Assunto</th>
-              <th className="pb-1 px-2 text-center w-16">Vol.</th>
-              <th className="pb-1 px-2 text-right w-24">Perc.</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredSubjects.map((sub, idx) => (
-              <tr 
-                key={idx} 
-                className="group hover:bg-slate-50/80 transition-all cursor-pointer"
-                onClick={() => onSubjectClick(sub.names, sub.primaryName)}
-              >
-                <td className="py-2.5 px-3 bg-slate-50/50 rounded-l-xl border-y border-l border-slate-100 group-hover:border-orange-200">
-                  <div className="flex flex-col">
-                    <span className="text-[11px] font-bold text-slate-700 truncate max-w-[280px]" title={sub.primaryName}>{sub.primaryName}</span>
-                    {sub.names.length > 1 && (
-                      <span className="text-[9px] font-medium text-slate-400 uppercase">{sub.names.length} variações</span>
-                    )}
+      {/* Recurrence Modal */}
+      <AnimatePresence>
+        {showModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 lg:p-8">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowModal(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
+                <div className="flex items-center gap-6">
+                  <div className="p-3 bg-orange-50 text-orange-600 rounded-2xl">
+                    <BarChart2 className="h-6 w-6" />
                   </div>
-                </td>
-                <td className="py-2.5 px-3 bg-slate-50/50 border-y border-slate-100 group-hover:border-orange-200 text-center">
-                  <span className="text-[11px] font-black text-slate-500 tabular-nums">{sub.value}</span>
-                </td>
-                <td className="py-2.5 px-3 bg-slate-50/50 rounded-r-xl border-y border-r border-slate-100 group-hover:border-orange-200 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <div className="w-12 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-orange-400" 
-                        style={{ width: `${sub.percentage}%` }}
-                      />
+                  <div>
+                    <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Análise Detalhada de Recorrência</h2>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Total de {totalTickets} Tickets Analisados</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="relative group">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-orange-500 transition-colors" />
+                    <input
+                      type="text"
+                      placeholder="Pesquisar recorrências..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 pr-24 py-2.5 bg-slate-50 border border-slate-200 text-sm font-bold text-slate-600 rounded-2xl outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all uppercase w-[300px] placeholder:text-slate-400"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                      <span className="text-[10px] font-black text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">
+                        {filteredSubjects.reduce((acc, s) => acc + s.value, 0)} TKTS
+                      </span>
                     </div>
-                    <span className="text-[11px] font-black text-orange-600 tabular-nums min-w-[32px]">{sub.percentage}%</span>
                   </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {filteredSubjects.length === 0 && (
-          <div className="py-8 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-            Nenhum assunto encontrado
+
+                  <button 
+                    onClick={() => {
+                      const allNames = filteredSubjects.flatMap(s => s.names);
+                      if (allNames.length > 0) {
+                        onSubjectClick(allNames, searchTerm || "Busca Filtrada");
+                      }
+                    }}
+                    disabled={filteredSubjects.length === 0}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-200 disabled:opacity-50 disabled:shadow-none"
+                  >
+                    <Table className="h-4 w-4" />
+                    Ver Tabela
+                  </button>
+
+                  <div className="h-8 w-px bg-slate-100 mx-2" />
+                  
+                  <button 
+                    onClick={() => setShowModal(false)}
+                    className="p-2 bg-slate-50 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-8 bg-slate-50/30">
+                <div className="max-w-4xl mx-auto space-y-3">
+                  {filteredSubjects.map((sub, idx) => (
+                    <motion.div 
+                      key={idx}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(idx * 0.03, 0.4) }}
+                      className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:border-orange-200 transition-all group/item flex items-center gap-5"
+                    >
+                      {/* Rank/Index */}
+                      <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-xs font-black text-slate-400 border border-slate-100 shrink-0 group-hover/item:bg-orange-50 group-hover/item:text-orange-500 transition-colors">
+                        #{idx + 1}
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-black text-slate-800 uppercase truncate pr-4">{sub.primaryName}</h4>
+                          <div className="flex items-center gap-4 shrink-0">
+                            <span className="text-[10px] font-black text-orange-600 bg-orange-50 px-2.5 py-1 rounded-lg">
+                              {sub.value} CHAMADOS
+                            </span>
+                            <span className="text-[11px] font-black text-slate-400 w-10 text-right">
+                              {sub.percentage}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Progress and Tags */}
+                        <div className="flex flex-col gap-3">
+                          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <motion.div 
+                              initial={{ width: 0 }}
+                              animate={{ width: `${sub.percentage}%` }}
+                              transition={{ duration: 0.8, ease: "easeOut" }}
+                              className="h-full bg-gradient-to-r from-orange-400 to-orange-500 rounded-full"
+                            />
+                          </div>
+                          
+                          <div className="flex flex-wrap gap-1">
+                            {sub.names.slice(0, 8).map((name, i) => (
+                              <span key={i} className="px-2 py-0.5 bg-slate-50 text-[9px] font-bold text-slate-500 border border-slate-100 rounded-md">
+                                {name}
+                              </span>
+                            ))}
+                            {sub.names.length > 8 && (
+                              <span className="px-2 py-0.5 bg-slate-50 text-[9px] font-bold text-slate-400 border border-slate-100 rounded-md">
+                                +{sub.names.length - 8}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Detail Button */}
+                      <button 
+                        onClick={() => onSubjectClick(sub.names, sub.primaryName)}
+                        className="p-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                        title="Ver tickets deste assunto"
+                      >
+                        <ChevronRight className="h-6 w-6" />
+                      </button>
+                    </motion.div>
+                  ))}
+
+                  {filteredSubjects.length === 0 && (
+                    <div className="py-20 text-center flex flex-col items-center">
+                      <div className="p-5 bg-slate-100 rounded-full mb-4">
+                        <Search className="h-10 w-10 text-slate-300" />
+                      </div>
+                      <h4 className="text-base font-black text-slate-400 uppercase tracking-widest">Nenhum resultado para a busca</h4>
+                      <p className="text-[10px] font-bold text-slate-300 uppercase mt-2">Tente outros termos ou limpe o filtro</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-center">
+                <button 
+                  onClick={() => setShowModal(false)}
+                  className="px-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-500 uppercase tracking-widest hover:bg-slate-50 transition-all"
+                >
+                  Fechar Visualização
+                </button>
+              </div>
+            </motion.div>
           </div>
         )}
-      </div>
-      <p className="text-[9px] text-center font-bold text-slate-400 uppercase mt-4">Dica: Clique em um assunto para visualizar os tickets detalhados</p>
-    </div>
+      </AnimatePresence>
+    </>
   );
 }
 
@@ -5385,15 +5464,18 @@ function QueueDistributionDonut({ data, onQueueClick }: { data: { name: string, 
 }
 
 function RankingPerformance({ data, hFull = false }: { data: CallData[], hFull?: boolean }) {
-  const [activeTab, setActiveTab] = useState<'score' | 'tickets'>('tickets');
+  const [activeTab, setActiveTab] = useState<'time' | 'tickets'>('time');
   
   const rankings = useMemo(() => {
     const agentStats = data.reduce((acc, call) => {
       const rawName = call.agentName || 'Não atribuído';
       const name = formatAgentName(rawName);
-      if (!acc[name]) acc[name] = { tickets: 0, totalSeconds: 0 };
+      if (!acc[name]) acc[name] = { tickets: 0, totalSeconds: 0, resolved: 0 };
       acc[name].tickets += 1;
       
+      const isResolved = (call.status || '').toLowerCase().includes('resolvido');
+      if (isResolved) acc[name].resolved += 1;
+
       const durationStr = String(call.totalLifeTime || '');
       const daysMatch = durationStr.match(/(\d+)d/);
       const hoursMatch = durationStr.match(/(\d+)h/);
@@ -5406,58 +5488,55 @@ function RankingPerformance({ data, hFull = false }: { data: CallData[], hFull?:
       acc[name].totalSeconds += (days * 86400) + (hours * 3600) + (minutes * 60);
       
       return acc;
-    }, {} as Record<string, { tickets: number, totalSeconds: number }>);
+    }, {} as Record<string, { tickets: number, totalSeconds: number, resolved: number }>);
 
     return Object.entries(agentStats).map(([name, stats]) => {
       const avgSeconds = stats.tickets > 0 ? stats.totalSeconds / stats.tickets : 0;
-      const avgHours = avgSeconds / 3600;
-      // Score calculation - slightly arbitrary to look like the image scores
-      const ticketsWeight = stats.tickets * 0.05;
-      const timeFactor = avgHours > 0 ? Math.min(5, 48 / (avgHours + 1)) : 5;
-      const score = Math.min(10, parseFloat((ticketsWeight + timeFactor).toFixed(2)));
+      const resolutionRate = stats.tickets > 0 ? (stats.resolved / stats.tickets) * 100 : 0;
       
       return {
         name,
         tickets: stats.tickets,
         avgSeconds,
-        score
+        resolutionRate
       };
     })
-    .sort((a, b) => activeTab === 'score' ? b.score - a.score : b.tickets - a.tickets)
-    .slice(0, 7);
+    .sort((a, b) => activeTab === 'time' ? a.avgSeconds - b.avgSeconds : b.resolutionRate - a.resolutionRate)
+    .filter(a => a.tickets > 0)
+    .slice(0, 10);
   }, [data, activeTab]);
 
   return (
-    <div className={`bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col ${hFull ? 'h-[424px]' : 'h-[480px]'} overflow-hidden`}>
+    <div className={`bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col ${hFull ? 'h-[424px]' : 'h-[480px]'} overflow-hidden group transition-all duration-300 hover:shadow-blue-500/10`}>
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-orange-50 text-orange-500 rounded-xl transition-transform hover:scale-105 duration-300">
-             <Trophy className="h-5 w-5" />
+          <div className="p-2 bg-orange-50 text-orange-500 rounded-xl transition-transform group-hover:scale-105 duration-300">
+             <Trophy className="h-4 w-4" />
           </div>
           <div>
-            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight leading-none mb-0.5">Ranking de Performance</h3>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Metas semanais</p>
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight leading-none mb-0.5">Ranking de SLA</h3>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tempo e Resolução</p>
           </div>
         </div>
         <div className="px-2.5 py-1 bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest rounded-lg border border-slate-100/50">
-          TOP 7
+          RANKING
         </div>
       </div>
 
       <div className="flex bg-slate-100/50 p-1 rounded-xl mb-6 border border-slate-200/50">
         <button 
-          onClick={() => setActiveTab('score')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${activeTab === 'score' ? 'bg-white text-blue-600 shadow-sm border border-slate-200/60 ring-1 ring-slate-100/10' : 'text-slate-400 hover:text-slate-600'}`}
+          onClick={() => setActiveTab('time')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${activeTab === 'time' ? 'bg-white text-blue-600 shadow-sm border border-slate-200/60 ring-1 ring-slate-100/10' : 'text-slate-400 hover:text-slate-600'}`}
         >
-          <Activity className="h-3 w-3" />
-          Por Score
+          <Clock className="h-3 w-3" />
+          TMR Médio
         </button>
         <button 
           onClick={() => setActiveTab('tickets')}
           className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${activeTab === 'tickets' ? 'bg-white text-blue-600 shadow-sm border border-slate-200/60 ring-1 ring-slate-100/10' : 'text-slate-400 hover:text-slate-600'}`}
         >
-          <Hash className="h-3 w-3" />
-          Por Tickets
+          <CheckCircle2 className="h-3 w-3" />
+          % Resolução
         </button>
       </div>
 
@@ -5466,68 +5545,38 @@ function RankingPerformance({ data, hFull = false }: { data: CallData[], hFull?:
           <thead>
             <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
               <th className="text-left px-2 pb-1">Técnico</th>
-              <th className="text-center pb-1">Tickets</th>
-              <th className="text-center pb-1">Média</th>
-              <th className="text-right px-2 pb-1">
-                <div className="flex items-center justify-end gap-1">
-                  Score <Info className="h-3 w-3 opacity-30" />
-                </div>
-              </th>
+              <th className="text-center pb-1">{activeTab === 'time' ? 'Tempo' : '% Res'}</th>
+              <th className="text-right px-2 pb-1">Tickets</th>
             </tr>
           </thead>
           <tbody>
-            {rankings.map((item, idx) => {
-               const h = Math.floor(item.avgSeconds / 3600);
-               const m = Math.floor((item.avgSeconds % 3600) / 60);
-               
-               return (
-                <tr key={idx} className="group transition-all duration-300">
-                  <td className="py-2.5 px-2 bg-white group-hover:bg-slate-50/50 rounded-l-xl border-y border-l border-slate-100/50 group-hover:border-blue-100 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-black shadow-sm shrink-0 ${
-                        idx === 0 ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-orange-200' : 
-                        idx === 1 ? 'bg-gradient-to-br from-slate-300 to-slate-400 text-white shadow-slate-100' : 
-                        idx === 2 ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white shadow-amber-100' : 
-                        'bg-slate-50 text-slate-400 border border-slate-100'
-                      }`}>
-                        {idx + 1}
-                      </div>
-                      <span className="text-xs font-bold text-slate-700 tracking-tight group-hover:text-blue-700 transition-colors truncate max-w-[110px]">
-                        {item.name}
-                      </span>
+            {rankings.map((agent, idx) => (
+              <tr key={idx} className="group/row bg-slate-50/30 hover:bg-slate-50 transition-colors border-y border-transparent">
+                <td className="px-2 py-3 rounded-l-xl">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black shrink-0 ${
+                      idx === 0 ? 'bg-amber-400 text-white' :
+                      idx === 1 ? 'bg-slate-300 text-white' :
+                      idx === 2 ? 'bg-amber-600 text-white' :
+                      'bg-white text-slate-400 border border-slate-100'
+                    }`}>
+                      {idx + 1}
                     </div>
-                  </td>
-                  <td className="py-2.5 text-center bg-white group-hover:bg-slate-50/50 border-y border-slate-100/50 group-hover:border-blue-100 transition-colors">
-                    <span className="text-xs font-black text-blue-600 tabular-nums">{item.tickets}</span>
-                  </td>
-                  <td className="py-2.5 text-center bg-white group-hover:bg-slate-50/50 border-y border-slate-100/50 group-hover:border-blue-100 transition-colors">
-                    <div className="flex flex-col items-center gap-1">
-                      <span className="text-[10px] font-black text-slate-600 tabular-nums text-nowrap">
-                        {h > 0 ? `${h}h ` : ''}{m}min
-                      </span>
-                      <div className="w-16 h-1 bg-slate-100 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full transition-all duration-1000 ${h >= 48 ? 'bg-red-500' : h >= 24 ? 'bg-orange-400' : 'bg-emerald-400'}`} 
-                          style={{ width: `${Math.min(100, (item.avgSeconds / (48 * 3600)) * 100)}%` }} 
-                        />
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-2.5 px-2 text-right bg-white group-hover:bg-slate-50/50 rounded-r-xl border-y border-r border-slate-100/50 group-hover:border-blue-100 transition-colors">
-                    <div className="flex flex-col items-end">
-                      <div className={`px-2 py-0.5 rounded-md text-[11px] font-black transition-colors ${
-                        item.score >= 8 ? 'bg-emerald-50 text-emerald-600' :
-                        item.score >= 5 ? 'bg-blue-50 text-blue-600' :
-                        'bg-slate-50 text-slate-500'
-                      }`}>
-                        {item.score.toFixed(2)}
-                      </div>
-                      <span className="text-[7px] font-black text-slate-300 uppercase tracking-widest mt-0.5">Score</span>
-                    </div>
-                  </td>
-                </tr>
-               )
-            })}
+                    <span className="text-[11px] font-bold text-slate-600 truncate max-w-[100px]">{agent.name}</span>
+                  </div>
+                </td>
+                <td className="text-center py-3">
+                  <span className={`text-[11px] font-black ${
+                    activeTab === 'time' ? 'text-blue-600' : 'text-emerald-600'
+                  }`}>
+                    {activeTab === 'time' ? formatSeconds(agent.avgSeconds) : `${agent.resolutionRate.toFixed(1)}%`}
+                  </span>
+                </td>
+                <td className="text-right px-2 py-3 rounded-r-xl">
+                  <span className="text-[11px] font-black text-slate-400">{agent.tickets}</span>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
         {rankings.length === 0 && (
@@ -5537,6 +5586,7 @@ function RankingPerformance({ data, hFull = false }: { data: CallData[], hFull?:
           </div>
         )}
       </div>
+      <p className="text-[9px] text-center font-bold text-slate-400 uppercase mt-4">Calculado com base em dados filtrados</p>
     </div>
   );
 }
