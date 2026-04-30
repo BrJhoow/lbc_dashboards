@@ -4805,8 +4805,18 @@ const AnalysisOfTicketsView = memo(({ data, allUniqueValues }: { data: CallData[
 });
 
 function PerformancePorTickets({ data }: { data: CallData[] }) {
+  const [selectedTeam, setSelectedTeam] = useState('Todos');
+  const [showModal, setShowModal] = useState(false);
+
+  const teams = useMemo(() => ['Todos', ...Array.from(new Set(data.map(d => d._team).filter(Boolean))).sort()], [data]);
+
+  const filteredData = useMemo(() => {
+    if (selectedTeam === 'Todos') return data;
+    return data.filter(d => d._team === selectedTeam);
+  }, [data, selectedTeam]);
+
   const ranking = useMemo(() => {
-    const agents = data.reduce((acc, call) => {
+    const agents = filteredData.reduce((acc, call) => {
       const name = call.agentName || 'Não Identificado';
       if (name === 'Ligações Perdidas') return acc;
       acc[name] = (acc[name] || 0) + 1;
@@ -4816,43 +4826,166 @@ function PerformancePorTickets({ data }: { data: CallData[] }) {
     return Object.entries(agents)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
-      .slice(0, 7)
-      .reverse(); // Reverse for horizontal layout
-  }, [data]);
+      .slice(0, 10);
+  }, [filteredData]);
+
+  const chartData = useMemo(() => [...ranking].reverse(), [ranking]);
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px]">
-      <div className="mb-6">
-        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">PERFORMANCE POR TICKETS</h3>
+    <>
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[424px]">
+        <div className="mb-6 flex items-center justify-between">
+          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">PERFORMANCE POR TICKETS</h3>
+          <div className="flex items-center gap-2">
+            <select 
+              value={selectedTeam} 
+              onChange={(e) => setSelectedTeam(e.target.value)}
+              className="bg-slate-50 border border-slate-100 rounded-lg px-2 py-1 text-[9px] font-black text-slate-500 uppercase outline-none focus:ring-2 focus:ring-blue-500/10 cursor-pointer"
+            >
+              {teams.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <button 
+              onClick={() => setShowModal(true)}
+              className="p-1.5 bg-slate-50 border border-slate-100 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+            >
+              <Maximize2 className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 h-0 min-h-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              layout="vertical"
+              data={chartData}
+              margin={{ left: 40, right: 20, top: 0, bottom: 0 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+              <XAxis type="number" hide />
+              <YAxis 
+                dataKey="name" 
+                type="category" 
+                width={80} 
+                axisLine={false} 
+                tickLine={false} 
+                tick={{ fontSize: 9, fontWeight: 700, fill: '#475569' }}
+              />
+              <Tooltip 
+                cursor={{ fill: 'transparent' }}
+                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+              />
+              <Bar dataKey="value" fill="#3b82f6" radius={[0, 6, 6, 0]} barSize={18}>
+                <LabelList dataKey="value" position="right" style={{ fontSize: 9, fontWeight: 800, fill: '#64748b' }} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
-      <div className="flex-1 h-0 min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            layout="vertical"
-            data={ranking}
-            margin={{ left: 40, right: 20, top: 0, bottom: 0 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-            <XAxis type="number" hide />
-            <YAxis 
-              dataKey="name" 
-              type="category" 
-              width={80} 
-              axisLine={false} 
-              tickLine={false} 
-              tick={{ fontSize: 9, fontWeight: 700, fill: '#475569' }}
+
+      {/* Modal Detalhado */}
+      <AnimatePresence>
+        {showModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowModal(false)}
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             />
-            <Tooltip 
-              cursor={{ fill: 'transparent' }}
-              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-            />
-            <Bar dataKey="value" fill="#3b82f6" radius={[0, 6, 6, 0]} barSize={24}>
-              <LabelList dataKey="value" position="right" style={{ fontSize: 10, fontWeight: 800, fill: '#64748b' }} />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white w-full max-w-4xl max-h-[80vh] rounded-3xl shadow-2xl overflow-hidden relative flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between shrink-0">
+                <div>
+                  <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Performance Detalhada de Agentes</h2>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Visão Geral de Produtividade - Equipe: {selectedTeam}</p>
+                </div>
+                <button 
+                  onClick={() => setShowModal(false)}
+                  className="p-2.5 bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-8 scrollbar-thin scrollbar-thumb-slate-200">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 h-full">
+                  {/* Left Column: Full Ranking Bar Chart */}
+                  <div className="bg-slate-50 rounded-2xl p-6 flex flex-col h-[500px]">
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase mb-6">Volume total por Agente</h3>
+                    <div className="flex-1 min-h-0">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart layout="vertical" data={ranking}>
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                          <XAxis type="number" hide />
+                          <YAxis 
+                            dataKey="name" 
+                            type="category" 
+                            width={100} 
+                            axisLine={false} 
+                            tickLine={false}
+                            tick={{ fontSize: 9, fontWeight: 700, fill: '#475569' }}
+                          />
+                          <Tooltip />
+                          <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20}>
+                            <LabelList dataKey="value" position="right" style={{ fontSize: 9, fontWeight: 800, fill: '#64748b' }} />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Detailed Stats List */}
+                  <div className="space-y-4">
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase">Top Performers</h3>
+                    <div className="space-y-3">
+                      {ranking.map((agent, idx) => {
+                        const agentTickets = filteredData.filter(d => d.agentName === agent.name);
+                        const avgWait = Math.round(agentTickets.reduce((sum, d) => sum + (d.waitTime || 0), 0) / (agentTickets.length || 1));
+                        
+                        return (
+                          <div key={idx} className="bg-white border border-slate-100 p-4 rounded-xl flex items-center justify-between group hover:border-blue-200 transition-all shadow-sm">
+                            <div className="flex items-center gap-4">
+                              <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px] font-black">
+                                {idx + 1}
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-black text-slate-700 tracking-tight">{agent.name}</h4>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase">{agent.value} Atendimentos</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="flex items-center gap-1.5 justify-end mb-1">
+                                <Clock className="h-3 w-3 text-slate-300" />
+                                <span className={`text-[10px] font-black ${avgWait > 600 ? 'text-red-500' : 'text-emerald-500'}`}>
+                                  {Math.floor(avgWait / 60)}m {avgWait % 60}s
+                                </span>
+                              </div>
+                              <p className="text-[8px] font-bold text-slate-300 uppercase">Tempo Médio</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 bg-slate-50 border-t border-slate-100 shrink-0 text-center">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                  Dados atualizados em tempo real conforme filtros do DASHBOARD
+                </p>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
